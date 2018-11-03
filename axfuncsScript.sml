@@ -2633,14 +2633,43 @@ val memory_set_upd_axiom = new_axiom("memory_set_upd_axiom", ``
 
 (**************** Core steps *****************)
 
-val _ = new_constant("refcore_step_rcv_phys", ``:refcore # refcore -> bool``);
-val _ = new_constant("refcore_step_rcv_virt", ``:refcore # refcore -> bool``);
-val _ = new_constant("refcore_step_rcv_rpl", ``:refcore # reply # refcore -> bool``);
-val _ = new_constant("refcore_step_rcv_psci", ``:refcore # event # refcore -> bool``);
-val _ = new_constant("refcore_step_snd_req", ``:refcore # request # refcore -> bool``);
-val _ = new_constant("refcore_step_internal", ``:refcore # refcore -> bool``);
+(**** uninterpreted model of refined core steps ****)
+(* transition relations, stepping from refined core state C to C'
 
+   refcore_step_rcv_phys(C,C') - receive physical interrupt
+   refcore_step_rcv_virt(C,C') - receive virtual interrupt
+   refcore_step_rcv_rpl(C,q,C') - receive memory reply q
+   refcore_step_rcv_psci(C,x,C') - receive PSCI command x
+   refcore_step_snd_req(C,r,C') - receive memory request r
+   refcore_step_internal(C,C') - internal step, e.g., arithmetic operation
+*)
+val _ = new_constant("refcore_step_rcv_phys", 
+		     ``:refcore # refcore -> bool``);
+val _ = new_constant("refcore_step_rcv_virt", 
+		     ``:refcore # refcore -> bool``);
+val _ = new_constant("refcore_step_rcv_rpl", 
+		     ``:refcore # reply # refcore -> bool``);
+val _ = new_constant("refcore_step_rcv_psci", 
+		     ``:refcore # event # refcore -> bool``);
+val _ = new_constant("refcore_step_snd_req", 
+		     ``:refcore # request # refcore -> bool``);
+val _ = new_constant("refcore_step_internal", 
+		     ``:refcore # refcore -> bool``);
 
+(* refcore_step(C,a,C') - refined core transition relation
+
+   the following actions a are defined:
+   
+   RCV (PHYS NONE c) - receive physical interrupt at core c,
+       the first argument of the action is only used in the ideal GIC distributor
+   RCV (VIRT c) - receive virtual interrupt at core c
+   RCV (MRPL r) - receive memory reply r from the MMU
+   RCV (PSCI e) - receive power controll command e, i.e., StartCore / StopCore
+   SEND (MREQ r) - send memory request r to the MMU
+   TAU - perform internal step
+
+   the relation does not hold for any other actions
+*)
 val refcore_step_def = Define `refcore_step (C : refcore, a : Action, C' : refcore) =
 	case a of
 	  | RCV (PHYS NONE c)  => refcore_step_rcv_phys(C,C')
@@ -3806,21 +3835,50 @@ val golden_comp_mmu_state_lem = store_thm("golden_comp_mmu_state_lem", ``
     
 (**************** Peripheral steps *****************)
 
-val _ = new_constant("per_step_rcv_rpl", ``:peripheral # reply # peripheral -> bool``);
-val _ = new_constant("per_step_rcv_req", ``:peripheral # request # peripheral -> bool``);
-val _ = new_constant("per_step_rcv_pev", ``:peripheral # pevent list # peripheral -> bool``);
-val _ = new_constant("per_step_snd_req", ``:peripheral # request # peripheral -> bool``);
-val _ = new_constant("per_step_snd_rpl", ``:peripheral # reply # peripheral -> bool``);
-val _ = new_constant("per_step_snd_pev", ``:peripheral # pevent list # peripheral -> bool``);
-val _ = new_constant("per_step_snd_irq", ``:peripheral # num # peripheral -> bool``);
-val _ = new_constant("per_step_internal", ``:peripheral # peripheral -> bool``);
+(**** uninterpreted model of the peripherals ****)
+(* peripheral transition relations for different actions
 
-(* requirements:
-- only reply to actual requests
-- history semantics
+   per_step_rcv_rpl(P,q,P') - receive DMA reply q from SMMU
+   per_step_rcv_req(P,r,P') - receive memory-mapped I/O (MMIO) request r
+   per_step_rcv_pev(P,l,P') - receive list l of related external input events
+   per_step_snd_req(P,r,P') - send DMA request to SMMU
+   per_step_snd_rpl(P,q,P') - send MMIO reply to memory, to be forwarded to core
+   per_step_snd_pev(P,l,P') - send list l of external output events
+   per_step_snd_irq(P,q,P') - signal interrupt q to GIC
+   per_step_internal(P,P') - internal step
 *)
+val _ = new_constant("per_step_rcv_rpl", 
+		     ``:peripheral # reply # peripheral -> bool``);
+val _ = new_constant("per_step_rcv_req", 
+		     ``:peripheral # request # peripheral -> bool``);
+val _ = new_constant("per_step_rcv_pev", 
+		     ``:peripheral # pevent list # peripheral -> bool``);
+val _ = new_constant("per_step_snd_req", 
+		     ``:peripheral # request # peripheral -> bool``);
+val _ = new_constant("per_step_snd_rpl", 
+		     ``:peripheral # reply # peripheral -> bool``);
+val _ = new_constant("per_step_snd_pev", 
+		     ``:peripheral # pevent list # peripheral -> bool``);
+val _ = new_constant("per_step_snd_irq", 
+		     ``:peripheral # num # peripheral -> bool``);
+val _ = new_constant("per_step_internal", 
+		     ``:peripheral # peripheral -> bool``);
 
-val per_step_def = Define `per_step (P : peripheral, a : Action, P' : peripheral) =
+(* per_step(P,a,P') - transition relation for peripherals
+
+   RCV (MRPL r) - receive DMA reply r from SMMU
+   RCV (SREQ r id) - receive MMIO request from sender id
+   RCV (PEV l) - receive list l of external inputs
+   SEND (MREQ r) - send DMA request r to SMMU
+   SEND (SRPL q id) - send MMIO reply q to memory, forwarded to sender core id
+   SEND (PEV l) - send list l of external outputs
+   SEND (PERQ (PIR q)) - send physical device interrupt PIR q to GIC
+   TAU - internal action
+
+   the relation does not hold for any other actions.
+*)
+val per_step_def = Define `
+per_step (P : peripheral, a : Action, P' : peripheral) =
 	case a of
           | RCV (MRPL r) => per_step_rcv_rpl(P,r,P')
           | RCV (SREQ r id) => per_step_rcv_req(P,r,P')
@@ -3833,6 +3891,24 @@ val per_step_def = Define `per_step (P : peripheral, a : Action, P' : peripheral
           | _   => F
 `;
 
+(* per_wrap_step(Pw,a,Pw) - peripheral wrapper semantics
+
+   we define the message history variables for memory-mapped I/O to the
+   peripherals explicitly, so that we can omit sender IDs from the peripheral
+   transitions, then peripheral states are identical at the ideal and refined
+   model, as exactly the same messages are received.
+
+   the wrapper affects only memory-mapped I/O requests and replies:
+
+   RCV (SREQ r id) - let peripheral receive message r and record its sender id
+   SEND (SRPL q id) - peripheral replied with q, remove the corresponding 
+		request from the records and attach the original sender id
+  
+   TODO: in the send case the id should match IOreq_rcvd(ReqOf q)
+
+   In the other cases the history variable is unaffected and the wrapper simply
+   proxies the request and reply messages of the underlying peripheral step.
+*)
 val per_wrap_step_def = Define `
 per_wrap_step (Pw : periph_wrapper, a : Action, Pw' : periph_wrapper) =
 case a of
@@ -3844,6 +3920,8 @@ case a of
 	   (Pw'.IOreq_rcvd = Pw.IOreq_rcvd)
 `;
 
+
+(* Lemma: summary of the MMIO receive semantics *)
 val per_wrap_rcv_io_lem = store_thm("per_wrap_rcv_io_lem", ``
 !Pw r id Pw'. 
     per_wrap_step(Pw,RCV (SREQ r id),Pw')
@@ -3855,6 +3933,9 @@ val per_wrap_rcv_io_lem = store_thm("per_wrap_rcv_io_lem", ``
   RW_TAC (srw_ss()) [per_wrap_step_def, combinTheory.APPLY_UPDATE_THM]
 );
 
+(* Lemma: summary of the MMIO send reply semantics 
+   TODO: this should also contrain "id" once the definition is fixed
+*)
 val per_wrap_io_rpl_lem = store_thm("per_wrap_io_rpl_lem", ``
 !Pw q id Pw'. 
     per_wrap_step(Pw,SEND (SRPL q id),Pw')
@@ -3866,6 +3947,8 @@ val per_wrap_io_rpl_lem = store_thm("per_wrap_io_rpl_lem", ``
   RW_TAC (srw_ss()) [per_wrap_step_def, combinTheory.APPLY_UPDATE_THM]
 );
 
+(* Lemma: the peripheral wrapper always steps the peripheral with the same
+action *)
 val per_wrap_per_step_lem = store_thm("per_wrap_per_step_lem", ``
 !Pw a Pw'. per_wrap_step(Pw,a,Pw') ==> per_step(Pw.st,a,Pw'.st)
 ``,
@@ -3885,12 +3968,14 @@ val per_wrap_per_step_lem = store_thm("per_wrap_per_step_lem", ``
      ]
 );
 
+(* per_IO_step a - a is an MMIO step *)
 val per_IO_step_def = Define `
    (per_IO_step (RCV (SREQ r id)) = T)
 /\ (per_IO_step (SEND (SRPL r id)) = T)
 /\ (per_IO_step _ = F)
 `;
 
+(* Lemma: alternate definition for per_IO_step *)
 val per_IO_step_lem = store_thm("per_IO_step_lem", ``
 !a. per_IO_step a <=> ((?q id. a = SEND (SRPL q id)) \/ 
 		       (?r id. a = RCV (SREQ r id)))
@@ -3904,6 +3989,7 @@ val per_IO_step_lem = store_thm("per_IO_step_lem", ``
   )
 );
 
+(* Lemma: only MMIO steps change the wrapper history variables *)
 val per_wrap_not_IO_step_req_rcvd_lem = 
 store_thm("per_wrap_not_IO_step_req_rcvd_lem", ``
 !Pw a Pw'. ~per_IO_step a /\ per_wrap_step(Pw,a,Pw') ==>
@@ -3925,31 +4011,72 @@ store_thm("per_wrap_not_IO_step_req_rcvd_lem", ``
      ]
 );
 
-(* also peripherals are sequential *)
+(* invariant of peripheral components:
+ 
+   Similar to the cores we also make the peripherals sequential, for simplicity,
+   thus there is at most one DMA request pending by a peripheral.
+
+   TODO: we never use this restriction, it can probably be dropped easily
+
+   Moreover, inactive peripherals do not perform DMA operations, i.e., there are
+   no pending DMA requests.
+ *)
 val inv_good_per_def = Define `inv_good_per (P:peripheral) = 
    CARD(per_req_sent P) <= 1
 /\ (~per_active P ==> (per_req_sent P = EMPTY))
 `;
 
+(* Axiom: peripheral steps preserve the invariants
+
+   In particular this means for the current invariant, that the peripheral does
+   not send a second DMA request while one is already pending. Additionally,
+   peripherals do not send DMA requests while inactive and they resolve all
+   pending DMA requests before shutting down.
+*)
 val inv_good_per_axiom = new_axiom("inv_good_per_axiom", ``
 !P a P'. inv_good_per P /\ per_step(P,a,P') ==> inv_good_per P'
 ``);
 
-(* only IO request can enable peripheral to start sending,
-simplifying away internal and external deactivation here
+(* Axiom: only IO request can enable peripheral to start sending, or shut down,
+   otherwise the activity state is preserved
+   
+   In principle it can also shut down when receiving a DMA reply.
+
+   We are simplifying away internal and external deactivation here
  *)
 val per_active_axiom = new_axiom("per_active_axiom", ``
 !P l P'. (per_step(P,TAU,P') \/ per_step(P, RCV (PEV l), P')) ==> 
 (per_active P = per_active P')
 ``);
 
+(* wrapper invariant:
+
+   the peripheral invariant holds
+
+   The wrapper MMIO history variables are consistent with the corresponding
+   message history variable in the abstract peripheral state.
+
+   Note that the sender ID is not coupled, as it is not recorded in the
+   peripheral, assuming that peripherals are agnostic to the assigned core id
+*)
 val inv_good_per_wrap_def = Define `inv_good_per_wrap (Pw:periph_wrapper) = 
     inv_good_per Pw.st
  /\ (!r. r IN per_req_rcvd Pw.st <=> IS_SOME (Pw.IOreq_rcvd r))
 `;
 
-(* semantics axioms *)
+(**** abstract behavioral specification ****)
 
+(* per_step_snd_req(P,r,P') - sending DMA request r
+
+   preconditons:
+   - r has not already been sent, i.e., it is not currently pending
+   - the peripheral is active   
+
+   postconditions:
+   - r is added to the currently pending DMA requests
+   - the peripheral is still active
+   - other abstract state (the record of received MMIO requests) is unchanged
+*)
 val per_send_dma_axiom = new_axiom("per_send_dma_axiom", ``
 !P r P'. per_step_snd_req(P,r,P') ==> 
    (per_req_sent P' = per_req_sent P UNION {r})
@@ -3959,6 +4086,17 @@ val per_send_dma_axiom = new_axiom("per_send_dma_axiom", ``
 /\ per_active P'
 ``);
 
+
+(* per_step_rcv_rpl(P,q,P') - receive DMA reply q
+
+   preconditons:
+   - the corresponding request r for q is pending
+   - the peripheral is active   
+
+   postconditions:
+   - r is removed from the currently pending DMA requests
+   - other abstract state (the record of received MMIO requests) is unchanged
+*)
 val per_rcv_dma_axiom = new_axiom("per_rcv_dma_axiom", ``
 !P q P'. per_step_rcv_rpl(P,q,P')
 ==>
@@ -3968,6 +4106,15 @@ val per_rcv_dma_axiom = new_axiom("per_rcv_dma_axiom", ``
 /\ per_active P
 ``);
 
+(* per_step_rcv_req(P,r,P') - receive MMIO request r
+
+   preconditons:
+   - the request r is not already pending
+
+   postconditions:
+   - r is added to the currently pending MMIO requests
+   - other abstract state (the record of sent DMA requests) is unchanged
+*)
 val per_rcv_io_axiom = new_axiom("per_rcv_io_axiom", ``
 !P r id P'. per_step_rcv_req(P,r,P') ==> 
    r NOTIN per_req_rcvd P
@@ -3975,6 +4122,18 @@ val per_rcv_io_axiom = new_axiom("per_rcv_io_axiom", ``
 /\ (per_req_rcvd P' = per_req_rcvd P UNION {r})
 ``);
 
+(* per_step_snd_rpl(P,q,P') - send MMIO reply q
+
+   preconditons:
+   - the corresponding MMIO request r is pending
+   - the peripheral is active 
+   TODO: we may want to drop this, as it seems unnecessarily strict,
+   a peripheral may first be configured before DMA capabilities are activated
+
+   postconditions:
+   - r is removed the currently pending MMIO requests
+   - other abstract state (the record of sent DMA requests) is unchanged
+*)
 val per_snd_iorpl_axiom = new_axiom("per_snd_iorpl_axiom", ``
 !P q id P'. per_step_snd_rpl(P,q,P')
 ==> 
@@ -3985,6 +4144,15 @@ val per_snd_iorpl_axiom = new_axiom("per_snd_iorpl_axiom", ``
 /\ per_active P
 ``);
 
+(* per_step_{snd/rcv}_pev(P,l,P') - 
+   send/receive list l of external outputs/inputs
+
+   preconditons:
+   - in the send case, the peripheral is active 
+
+   postconditions:
+   - the abstract message record state is unchanged
+*)
 val per_event_step_axiom = new_axiom("per_event_step_axiom", ``
 !P l P'. (per_step_rcv_pev(P,l,P') \/ per_step_snd_pev(P,l,P')) ==> 
    (per_req_sent P' = per_req_sent P)
@@ -3992,6 +4160,14 @@ val per_event_step_axiom = new_axiom("per_event_step_axiom", ``
 /\ (per_step_snd_pev(P,l,P') ==> per_active P)
 ``);
 
+(* per_step_snd_irq(P,q,P') - send decive interrupt q
+
+   preconditons:
+   - the peripheral is active 
+
+   postconditions:
+   - the abstract message record state is unchanged
+*)
 val per_irq_step_axiom = new_axiom("per_irq_step_axiom", ``
 !P q P'. per_step_snd_irq(P,q,P') ==> 
    (per_req_sent P' = per_req_sent P)
@@ -3999,6 +4175,16 @@ val per_irq_step_axiom = new_axiom("per_irq_step_axiom", ``
 /\ per_active P
 ``);
 
+(* per_step_internal(P,P') - internal peripheral step
+
+   preconditons:
+   none assumed
+
+   postconditions:
+   - the abstract message record state is unchanged
+
+   in addition the active state does not change, as given by per_active_axiom
+*)
 val per_internal_axiom = new_axiom("per_internal_axiom", ``
 !P P'. per_step_internal(P,P') ==> 
    (per_req_sent P' = per_req_sent P)
@@ -4006,6 +4192,8 @@ val per_internal_axiom = new_axiom("per_internal_axiom", ``
 ``);
 
 (* could prove this as lemma:
+
+inactive peripherals do not send messages or interrupts
 
 val per_inactive_axiom = new_axiom("per_active_axiom", ``
 !P a P'. ~per_active P /\ a <> TAU /\ (!l. a <> RCV (PEV l)) 
@@ -4015,9 +4203,13 @@ val per_inactive_axiom = new_axiom("per_active_axiom", ``
 ``);
 *)
 
-(* do not need liveness axioms and coupling between ideal and refined steps, 
-because configurations are equal and transitions are scheduled in lock-step *)
+(* we do not need liveness axioms and coupling between ideal and refined steps,
+because configurations are equal in the ideal and refined model and transitions
+are scheduled in lock-step *)
 
+(* Lemma: if the invariants hold then MMIO requests are only received if they
+are not only pending according to the wrapper records
+*)
 val per_wrap_io_unique_lem = store_thm("per_wrap_io_unique_lem", ``
 !Pw r id Pw'. 
     per_wrap_step(Pw,RCV (SREQ r id),Pw')
@@ -4031,19 +4223,8 @@ val per_wrap_io_unique_lem = store_thm("per_wrap_io_unique_lem", ``
   METIS_TAC [optionTheory.NOT_IS_SOME_EQ_NONE]
 );
 
-val per_wrap_io_unique_lem = store_thm("per_wrap_io_unique_lem", ``
-!Pw r id Pw'. 
-    per_wrap_step(Pw,RCV (SREQ r id),Pw')
- /\ inv_good_per_wrap Pw
-==> 
-    ~IS_SOME (Pw.IOreq_rcvd r)
-``,
-  RW_TAC (srw_ss()) [per_wrap_step_def, per_step_def] >>
-  IMP_RES_TAC per_rcv_io_axiom >>
-  IMP_RES_TAC inv_good_per_wrap_def >>
-  METIS_TAC [optionTheory.NOT_IS_SOME_EQ_NONE]
-);
 
+(* Lemma: the received MMIO requests are only affected by MMIO steps *)
 val per_not_IO_step_req_rcvd_lem = 
 store_thm("per_not_IO_step_req_rcvd_lem", ``
 !P a P'. ~per_IO_step a /\ per_step(P,a,P') ==>
@@ -4083,6 +4264,7 @@ store_thm("per_not_IO_step_req_rcvd_lem", ``
      ]
 );
 
+(* Lemma: peripheral steps preserve the wrapper (and peripheral) invariants *)
 val inv_good_per_wrap_lem = store_thm("inv_good_per_wrap_lem", ``
 !P a P'. inv_good_per_wrap P /\ per_wrap_step(P,a,P') ==> inv_good_per_wrap P'
 ``,
@@ -4444,7 +4626,6 @@ let u = (gic_abs G).gicd reg in
 /\ ((gic_abs G').gicc = (gic_abs G).gicc)
 ``);
 
-(* TODO: need bisim property for volatile registers, gicc, and Q *)
 
 (* write to SGIR enables up to 8 interrupts *)
 val gic_write_sgir_axiom = new_axiom("gic_write_sgir_axiom", ``
@@ -4665,14 +4846,46 @@ val gicv_rpl_Q_pir_lem = store_thm("gicv_rpl_Q_pir_lem", ``
 
 (**************** Memory steps *****************)
 
-val _ = new_constant("mem_step_rcv_rpl", ``:memory # reply # senderID # memory -> bool``);
-val _ = new_constant("mem_step_rcv_req", ``:memory # request # senderID # memory -> bool``);
-val _ = new_constant("mem_step_snd_req", ``:memory # request # senderID # memory -> bool``);
-val _ = new_constant("mem_step_snd_rpl", ``:memory # reply # senderID # memory -> bool``);
-(* internal steps tied to specific sender of request thats handled, in order to couple with corresponding ideal memory, could do the same for GIC *)
-val _ = new_constant("mem_step_internal", ``:memory # senderID # memory -> bool``);
+(**** uninterpreted memory model ****)
 
-val mem_step_def = Define `mem_step (m : memory, a : Action, go: num option, m' : memory) =
+(* memory transition relations
+
+   mem_step_rcv_rpl(m,q,id,m') - receive MMIO reply q for sender id
+   mem_step_rcv_req(m,r,id,m') - receive memory request r from sender id
+   mem_step_snd_req(m,r,id,m') - forward MMIO request r to peripheral / GIC 
+		                 from sender id
+   mem_step_snd_rpl(m,q,id,m') - send/forward reply q to sender id
+   mem_step_internal(m,id,m') - perform internal step on behalf of sender id
+
+   Internal steps are tied to specific sender of request thats handled in order
+   to couple with corresponding ideal memory, could do the same for GIC if it
+   had internal actions
+*) 
+val _ = new_constant("mem_step_rcv_rpl", 
+		     ``:memory # reply # senderID # memory -> bool``);
+val _ = new_constant("mem_step_rcv_req", 
+		     ``:memory # request # senderID # memory -> bool``);
+val _ = new_constant("mem_step_snd_req", 
+		     ``:memory # request # senderID # memory -> bool``);
+val _ = new_constant("mem_step_snd_rpl", 
+		     ``:memory # reply # senderID # memory -> bool``);
+val _ = new_constant("mem_step_internal", 
+		     ``:memory # senderID # memory -> bool``);
+
+(* mem_step(m,a, go, m') - 
+   perform action a on memory m resulting in m', go is only used by internal
+   steps in the ideal model in order to determine if the sender id is valid
+   within the current guest, for refined memory it should always be NONE
+
+   RCV (SRPL q id) - receive MMIO reply q for sender id
+   RCV (SREQ r id) - receive memory request from sender id
+   SEND (SREQ r id) - forward MMIO request r from sender id
+   SEND (SRPL q id) - send memory/forward MMIO reply to sender id
+   TAU - pick a valid sender wrt guest go, and perform a corresponding internal 
+         step on behalf of one of its pending requests
+*)
+val mem_step_def = Define `
+mem_step (m : memory, a : Action, go: num option, m' : memory) =
 	case a of
           | RCV (SRPL r id) => mem_step_rcv_rpl(m,r,id,m')
           | RCV (SREQ r id) => mem_step_rcv_req(m,r,id,m')
@@ -4683,9 +4896,12 @@ val mem_step_def = Define `mem_step (m : memory, a : Action, go: num option, m' 
 `;
 
 (* memory invariant:
-- sent IO requests coupled to received requests
-- sent requests are for GIC or peripheral
-- received replies are from GIC or peripheral
+   - sent MMIO requests are for GIC or peripheral
+   - received MMIO replies:
+     - are from GIC or peripheral,
+     - match a received MMIO request
+     - not have a corresponding sent request pending at the same time
+   - all requests and replies received by the memory match uniquely
  *)
 val inv_good_mem_def = Define `inv_good_mem (m:memory) = 
    (!r id. (r,id) IN (mem_req_sent m) ==> 
@@ -4703,11 +4919,22 @@ val inv_good_mem_def = Define `inv_good_mem (m:memory) =
 
 (* semantics axioms *)
 
-(* NOTE: the following semantics assume that memory is sequential per core
-and coherent, i.e., memory abstraction only changes for writes,
-also internal steps have no visible effect
+(* NOTE: the following semantics assume that memory is coherent, i.e., memory
+abstraction only changes for writes, also internal steps have no visible effect
 *)
 
+(* mem_step_rcv_rpl(m,q,id,m') - receive MMIO reply q for sender id
+
+   preconditions:
+   - q matches a received MMIO request r from sender id
+   - r targets the GIC or a peripheral
+   - q is a well-formed reply
+
+   postconditions:
+   - (q,id) is added to the record of received MMIO replies
+   - (r,id) is removed from the record of pending MMIO requests
+   - the rest of the abstract state is unchanged
+*)
 val mem_rcv_rpl_axiom = new_axiom("mem_rcv_rpl_axiom", ``
 !m q id m'. mem_step_rcv_rpl(m,q,id,m')
 ==>    
@@ -4721,6 +4948,15 @@ val mem_rcv_rpl_axiom = new_axiom("mem_rcv_rpl_axiom", ``
 /\ (mem_rpl_rcvd m' = mem_rpl_rcvd m UNION {(q,id)})
 ``);
 
+(* mem_step_rcv_req(m,r,id,m') - receive memory request r from sender id
+
+   preconditions:
+   none assumed
+
+   postconditions:
+   - (r,id) is added to the record of received requests
+   - the rest of the abstract state is unchanged
+*)
 val mem_rcv_req_axiom = new_axiom("mem_rcv_req_axiom", ``
 !m r id m'. mem_step_rcv_req(m,r,id,m')
 ==>    
@@ -4730,7 +4966,17 @@ val mem_rcv_req_axiom = new_axiom("mem_rcv_req_axiom", ``
 /\ (mem_rpl_rcvd m' = mem_rpl_rcvd m)
 ``);
 
-(* never send IO request that was not received, only send IO requests *)
+(* mem_step_snd_req(m,r,id,m') - forward MMIO request r for sender id
+
+   preconditions:
+   - r targets the GIC or a peripheral
+   - (r,id) was received and is not currently pending / already sent
+   - no reply for r was received yet (e.g., due to being sent earlier)
+
+   postconditions:
+   - (r,id) is added to the record of sent MMIO requests
+   - the rest of the abstract state is unchanged
+*)
 val mem_snd_req_axiom = new_axiom("mem_snd_req_axiom", ``
 !m r id m'. mem_step_snd_req(m,r,id,m')
 ==>
@@ -4744,7 +4990,19 @@ val mem_snd_req_axiom = new_axiom("mem_snd_req_axiom", ``
 /\ (mem_rpl_rcvd m' = mem_rpl_rcvd m)
 ``);
 
-(* only forward received replies for received requests, to right receiver *)
+(* mem_step_snd_rpl(m,q,id,m') - forward MMIO reply q to sender id
+
+   preconditions:
+   - q is a received MMIO reply
+   - there exists a matching pending request r
+   - r targets the GIC or a peripheral
+   - q is well-formed 
+
+   postconditions:
+   - (r,id) is removed from the record of pending memory requests
+   - (q,id) is removed from the record of received MMIO replies
+   - the rest of the abstract state is unchanged
+*)
 val mem_io_fw_axiom = new_axiom("mem_io_fw_axiom", ``
 !m q id m'. mem_step_snd_rpl(m,q,id,m') /\ (q,id) IN mem_rpl_rcvd m
 ==>
@@ -4757,8 +5015,19 @@ val mem_io_fw_axiom = new_axiom("mem_io_fw_axiom", ``
 /\ (mem_rpl_rcvd m' = mem_rpl_rcvd m DIFF {(q,id)})
 ``);
 
-(* read replies only for matching requests, 
-correct value sent back to right receiver *)
+(* mem_step_snd_rpl(m,q,id,m') - send read reply q to sender id
+
+   preconditions:
+   - q is not a received MMIO reply
+   - q is a read of d bytes of address a returning value v
+   - there exists a matching pending request r
+   - r does not target the GIC or a peripheral
+
+   postconditions:
+   - (r,id) is removed from the record of pending memory requests
+   - v is the memory contents of d contiguous bytes starting at address a
+   - the rest of the abstract state is unchanged
+*)
 val mem_read_axiom = new_axiom("mem_read_axiom", ``
 !m q id m' a d v i. mem_step_snd_rpl(m,q,id,m') 
          /\ (q,id) NOTIN mem_rpl_rcvd m
@@ -4773,7 +5042,19 @@ val mem_read_axiom = new_axiom("mem_read_axiom", ``
 /\ (v = w2v (mem_read (mem_abs m) (Adr r) d))
 ``);
 
-(* same for walk result *)
+(* mem_step_snd_rpl(m,q,id,m') - send page table lookup reply q to MMU of id
+
+   preconditions:
+   - q is not a received MMIO reply
+   - q is a page table lookup of at address a returning value v
+   - there exists a matching pending request r
+   - r does not target the GIC or a peripheral
+
+   postconditions:
+   - (r,id) is removed from the record of pending memory requests
+   - v is the memory contents of 8 contiguous bytes starting at address a
+   - the rest of the abstract state is unchanged
+*)
 val mem_walk_axiom = new_axiom("mem_walk_axiom", ``
 !m q id m' a v i. mem_step_snd_rpl(m,q,id,m') 
          /\ (q,id) NOTIN mem_rpl_rcvd m
@@ -4788,7 +5069,13 @@ val mem_walk_axiom = new_axiom("mem_walk_axiom", ``
 /\ (v = mem_read (mem_abs m) (Adr r) 8)  
 ``);
 
-(* TODO: bit_field_insert only defined if a is aligned, prove lemma? *)
+(* page_write(pg,a,d,v) = pg' - update d contiguous bytes at address a in page
+pg with value v, resulting in page pg'
+
+only defined for d=1,2,4,8, otherwise no effect
+
+TODO: bit_field_insert only defined if a is aligned, prove lemma? 
+*)
 val page_write_def = Define `page_write (pg:PAGE, a : bool[12], d, v:bitstring) =
 case d of 
   | 1 => bit_field_insert (w2n a + 7) (w2n a) (v2w v:bool[8]) pg
@@ -4798,7 +5085,22 @@ case d of
   | _ => pg
 `;
 
-(* only write for given request, at right position with correct value *)
+(* mem_step_snd_rpl(m,q,id,m') - send write reply q to sender id
+
+   preconditions:
+   - q is not a received MMIO reply
+   - q is a write of d bytes at address with value v
+   - there exists a matching pending request r
+   - r does not target the GIC or a peripheral
+
+   postconditions:
+   - (r,id) is removed from the record of pending memory requests
+   - the memory is updated with the corresponding modified page, 
+     where only the targeted bytes changed to v
+     TODO: this could be simplified by stating the effect directly 
+           in terms of the memory abstraction
+   - the rest of the abstract state is unchanged
+*)
 val mem_write_axiom = new_axiom("mem_write_axiom", ``
 !m q id m' a d v i pg. mem_step_snd_rpl(m,q,id,m') 
          /\ (q,id) NOTIN mem_rpl_rcvd m
@@ -4814,9 +5116,17 @@ val mem_write_axiom = new_axiom("mem_write_axiom", ``
 /\ (mem_abs m' = mem_abs m'')
 ``);
 
-(* never raise memory faults here, unless forwarded from a peripheral
-simplification: we do not consider parity/CRC faults, tampering, memory holes
-redirect to io_fw case
+(* mem_step_snd_rpl(m,q,id,m') - send fault reply q to sender id
+
+   preconditions:
+   - q is a fault that was received as an MMIO reply
+
+   postconditions:
+   no additional restrictions than what is already defined above
+  
+   We never raise memory faults, unless forwarded from a peripheral or the GIC.
+   This is a simplification: we do not consider parity/CRC faults, tampering;
+   access to memory holes are prevented by the hypervisor/MMU
  *)
 val mem_fault_axiom = new_axiom("mem_fault_axiom", ``
 !m q id m'. mem_step_snd_rpl(m,q,id,m') /\ Frpl q
@@ -4825,8 +5135,19 @@ val mem_fault_axiom = new_axiom("mem_fault_axiom", ``
 ``);
 
 
-(* internal steps have no visible effect, only step for received request,
-TODO?: change to cover weaker memory model *)
+(* mem_step_snd_rpl(m,id,m') - internal step on behalf of sender id
+
+   preconditions:
+   - there exists a pending request r of sender id
+   - r does not target the GIC or a peripheral
+
+   postconditions:
+   - the abstract state is unchanged
+
+   Internal steps have no visible effect, if memory coherency can be broken,
+   this can be exposed here, however the effects would have to be coupled with
+   the ideal model through a bisimuation obligation.
+*)
 val mem_internal_axiom = new_axiom("mem_internal_axiom", ``
 !m id m'. mem_step_internal(m,id,m')
 ==>    
@@ -4843,21 +5164,38 @@ TODO?: lemma that memory abstraction changes only for writes
 
 (* liveness / enabled axioms *)
 
+(* enabling specification:
+   
+   an MMIO reply q must be receivable if:
+   - there is a matching request pending as sent
+*)
 val mem_rcv_rpl_enabled_axiom = new_axiom("mem_rcv_rpl_enabled_axiom", ``
 !m q r id. (r,id) IN mem_req_sent m /\ match(r,q)
 ==> 
 ?m'. mem_step_rcv_rpl(m,q,id,m')
 ``);
 
-(* allow to receive any request, TODO?: do we care about duplicates? 
-I don't think for now, otherwise we need a freshness invariant on message ids
-here only one message per core anyway, needs to be handled when this changes
+(* enabling specification: 
+
+   the memory may receive any request at any time.
+
+   Note that we do not consider duplicate requests from the same sender here as
+   the cores send only one request at a time anyway. Also we assume that an
+   instantiation will add serial numbers to memory requests so that each request
+   is uniquely identified in the system.
 *)
 val mem_rcv_req_enabled_axiom = new_axiom("mem_rcv_req_enabled_axiom", ``
 !m r id. ?m'. mem_step_rcv_req(m,r,id,m')
 ``);
 
-(* all IO requests can be forwarded, if not yet done *)
+(* enabling specification:
+
+   sending an MMIO request r for sender id is possible if:
+   - r was received by the memory from sender id
+   - r was not yet sent
+   - no matching reply was received yet
+   - r targets the GIC or a peripheral
+*)
 val mem_snd_req_enabled_axiom = new_axiom("mem_snd_req_enabled_axiom", ``
 !m r id. (r,id) IN mem_req_rcvd m       
       /\ (r,id) NOTIN mem_req_sent m
@@ -4867,7 +5205,14 @@ val mem_snd_req_enabled_axiom = new_axiom("mem_snd_req_enabled_axiom", ``
 ?m'. mem_step_snd_req(m,r,id,m')
 ``);
 
-(* only send replies that match a request, from received replies if IO *)
+(* enabling specification:
+
+   sending an reply q to sender id is always possible if:
+   - a matching request r was received by the memory from sender id
+   - if r targets the GIC or a peripheral, then q was received earlier 
+   - if r is not an MMIO request but a read / PT walk:
+     - the returned value matches the contents in the abstract state
+*)
 val mem_snd_rpl_enabled_axiom = new_axiom("mem_snd_rpl_enabled_axiom", ``
 !m q id. (?r. (r,id) IN mem_req_rcvd m /\ match(r,q)
 	   /\ if PAdr r IN A_gicper
@@ -4878,6 +5223,12 @@ val mem_snd_rpl_enabled_axiom = new_axiom("mem_snd_rpl_enabled_axiom", ``
 ?m'. mem_step_snd_rpl(m,q,id,m')
 ``);
 
+(* enabling specification:
+
+   internal steps are always possible for sender id if:
+   - a matching request r was received by the memory from sender id
+   - if r does not target the GIC or a peripheral
+*)
 (* internal steps possible for all senders that have requests present *)
 val mem_internal_enabled_axiom = new_axiom("mem_internal_enabled_axiom", ``
 !m id. (?r. (r,id) IN mem_req_rcvd m /\ PAdr r NOTIN A_gicper)
@@ -4885,6 +5236,10 @@ val mem_internal_enabled_axiom = new_axiom("mem_internal_enabled_axiom", ``
 ?m'. mem_step_internal(m,id,m')
 ``);
 
+(* Axiom: the memory only sends well-formed replies
+
+   TODO: it should be possible to prove this explicitly from the specs 
+*)
 val good_mem_rpl_axiom = new_axiom("good_mem_rpl_axiom", ``
 !m q id m'. inv_good_mem m /\ mem_step_snd_rpl (m,q,id,m')
 ==>
@@ -4940,7 +5295,7 @@ val mem_acc_not_sent_lem = store_thm("mem_acc_not_sent_lem", ``
        ]
 );
 
-
+(* former axiom, now proved *)
 val inv_good_mem_axiom = store_thm("inv_good_mem_axiom", ``
 !m a m' go. inv_good_mem m /\ mem_step(m,a,go,m') ==> inv_good_mem m'
 ``,
