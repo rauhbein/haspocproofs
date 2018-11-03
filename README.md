@@ -5,6 +5,10 @@ Embedded Execution Platforms"
 
 Submission to JCEN by Christoph Baumann, Oliver Schwarz, and Mads Dam
 
+We verify information flow security for the design of the HASPOC hypervisor:
+
+https://haspoc.sics.se/
+
 ## DISCLAIMER
 
 The models and proofs presented here are a snapshot of our formal development
@@ -19,8 +23,7 @@ experience with the tool at the beginning of the project. Looking back, we would
 certainly do things differently when it comes to the technical details. Please
 keep in mind that this exercise was conducted as a feasability study for the
 approach described in the paper. As such we see it as a confirmation of its
-viability, even though the formalization surely needs improvement to give
-convincing assurance of the hypervisor's security itself.
+viability, even though the formalization surely needs improvement.
 
 ## BUILD NOTES
 
@@ -57,7 +60,7 @@ Since this proof was only meant as a case study we simplified the hypervisor
 design and the hardware behaviour in a few places. These simplifications are
 mentioned in comments next to the corresponding definitions.
 
-##FILE DESCRIPTION
+## FILE DESCRIPTION
 
 * math_lemmasScript.sml   -- some mathematical lemmas about sets and bit vectors
 
