@@ -1,0 +1,627 @@
+ideal_C_RCU_sim_step_lem
+core puts IGC interrupt in message box, complete send IGC handler
+
+     /CORE_INTERNAL   (core executes HVC, exception semantics)
+    / HV_SIGC_ENTRY   (HV_INTERNAL)
+   /  HV_SIGC_SND_SGI (HV_SND_MREQ, sends r to GIC)
+  /   MMU_SND_MREQ    (forward r to memory)
+ /    GIC_RCV_IOREQ   (forward to GIC)
+!=====GIC_SND_IORPL   (activate SGI and reply to memory)
+ \    MMU_RCV_MRPL    (reply to MMU)
+  `---HV_SIGC_RETURN  (HV_RCV_MRPL)
+
+
+ideal_C_IGC_sim_step_lem
+sending IGC interrupt to other guest, includes complete receive IGC handler
+
+     /CORE_RCV_IRQ       (exception semantics)
+    / HV_ASYNC_IRQ       (HV_INTERNAL)
+   /  HV_ASYNC_SND_ACK   (HV_SND_MREQ, sends r to GIC)
+  /   MMU_SND_MREQ       (forward r to memory)
+ /    GIC_RCV_IOREQ      (forward to GIC)
+!=====GIC_SND_IORPL      (acknowledge IRQ and reply to memory)
+|     MMU_RCV_MRPL       (reply to MMU)
+|     HV_RIGC_RCV_ACK    (HV_RCV_MRPL)
+|     HV_RIGC_SND_EOI    (HV_SND_MREQ, sends r to GIC)
+|     MMU_SND_MREQ       (forward r to memory)
+|     GIC_RCV_IOREQ      (forward to GIC)
+ \    GIC_SND_IORPL      (trigger end-of-interrupt for SGI and reply to memory)
+ |    MMU_RCV_MRPL       (reply to MMU)
+ |    HV_RIGC_RCV_EOI    (HV_RCV_MRPL)
+ |    HV_RIGC_SND_CHECK  (HV_SND_MREQ, sends r to GIC)
+ |    MMU_SND_MREQ       (forward r to memory)
+ |    GIC_RCV_IOREQ      (forward to GIC)
+  \   GIC_SND_IORPL      (read List Register and reply to memory)
+  |   MMU_RCV_MRPL       (reply to MMU)
+  |   HV_RIGC_RCV_CHECK	 (HV_RCV_MRPL)
+  |   HV_RIGC_SND_INJECT (HV_SND_MREQ, sends r to GIC,         only if not already pending)
+  |   MMU_SND_MREQ       (forward r to memory, 	  	       only if not already pending)
+  |   GIC_RCV_IOREQ      (forward to GIC, 		       only if not already pending)
+   \  GIC_SND_IORPL      (inject virt IRQ and reply to memory, only if not already pending)
+   |  MMU_RCV_MRPL       (reply to MMU,       	       	       only if not already pending)
+   |  HV_RIGC_RCV_INJECT (HV_RCV_MRPL, 			       only if not already pending)
+   |  HV_RIGC_SND_DEACT  (HV_SND_MREQ, sends r to GIC)
+   |  MMU_SND_MREQ   	 (forward r to memory)
+   |  GIC_RCV_IOREQ	 (forward to GIC)
+    \ GIC_SND_IORPL	 (deactivate SGI and reply to memory)
+    | MMU_RCV_MRPL	 (reply to MMU)
+    | HV_RIGC_RCV_DEACT	 (HV_RCV_MRPL)
+    `-HV_RIGC_RETURN     (HV_INTERNAL)
+
+
+ideal_CORE_SND_MREQ_sim_step_lem **GUEST/SWITCH-DONE/TODO:GICD**
+core sends memory request, includes all MMU translation steps
+
+!==CORE_SND_MREQ  (guest sends r to MMU)
+*  MMU_SND_MREQ	  (MMU performs repeated lookups until r in FAULT or FINAL NONE)
+*--MMU_RCV_MRPL	  (memory sends repeated replies for lookups to MMU)
+
+ideal_PER_SND_DMAREQ_sim_step_lem **GUEST/SWITCH-DONE**
+peripheral sends DMA request, includes all SMMU translation steps
+
+!==PER_SND_DMAREQ    (peripheral sends r to SMMU
+*  SMMU_SND_DMAREQ   (SMMU performs repeated lookups until r in FAULT or FINAL NONE)
+*--SMMU_RCV_DMARPL   (memory sends repeated replies for lookups to SMMU)
+
+
+ideal_GIC_SND_IORPL_sim_step_lem **GUEST/SWITCH-DONE/TODO:GICD**
+GIC replies to IO requests, includes complete GICD virtualization
+handler among other things
+
+case GICD: four cases
+1-2) Emulation, read / write
+
+!==HV_GICD_EMU_READ / HV_GICD_EMU_WRITE	(HV_INTERNAL)
+
+3-4) Filtered request, read / write **HANDLER-TODO**
+
+   /HV_GICD_REQ_READ / HV_GICD_REQ_WRITE	(HV_SND_MREQ, send filtered request to GICD, lock it)
+  / MMU_SND_MREQ       				(forward r to memory)
+ /  GIC_RCV_IOREQ   				(forward to GIC)
+!===GIC_SND_IORPL      				(read/write register and reply to memory)
+ \  MMU_RCV_MRPL       				(reply to MMU)
+  `-HV_GICD_UNLOCK_READ	/ HV_GICD_UNLOCK_WRITE  (HV_RCV_MRPL, unlock GICD, filter reply)
+   
+case: GICC **GUEST/SWITCH-DONE**
+
+!==GIC_SND_IORPL	(same reply with same effect on CPU interface)
+
+
+ideal_GIC_DIST_sim_step_lem
+delivery of interrupt to ideal core interrupt interface, includes
+complete interrupt injection handler
+
+     /CORE_RCV_IRQ       (exception semantics)
+    / HV_ASYNC_IRQ       (HV_INTERNAL)
+   /  HV_ASYNC_SND_ACK   (HV_SND_MREQ, sends r to GIC)
+  /   MMU_SND_MREQ       (forward r to memory)
+ /    GIC_RCV_IOREQ      (forward to GIC)
+!=====GIC_SND_IORPL      (acknowledge IRQ and reply to memory)
+|     MMU_RCV_MRPL       (reply to MMU)
+|     HV_IRQ_RCV_ACK     (HV_RCV_MRPL)
+|     HV_IRQ_SND_EOI     (HV_SND_MREQ, sends r to GIC)
+|     MMU_SND_MREQ       (forward r to memory)
+|     GIC_RCV_IOREQ      (forward to GIC)
+ \    GIC_SND_IORPL      (trigger end-of-interrupt for SGI and reply to memory)
+ |    MMU_RCV_MRPL       (reply to MMU)
+ |    HV_IRQ_RCV_EOI     (HV_RCV_MRPL)
+ |    HV_IRQ_SND_CHECK   (HV_SND_MREQ, sends r to GIC)
+ |    MMU_SND_MREQ       (forward r to memory)
+ |    GIC_RCV_IOREQ      (forward to GIC)
+  \   GIC_SND_IORPL      (read List Register and reply to memory)
+  |   MMU_RCV_MRPL       (reply to MMU)
+  |   HV_IRQ_RCV_CHECK	 (HV_RCV_MRPL)
+  |   HV_IRQ_SND_INJECT  (HV_SND_MREQ, sends r to GIC,         only if not already pending, or also not active for PIRs)
+  |   MMU_SND_MREQ       (forward r to memory, 	  	       only if not already pending, or also not active for PIRs)
+  |   GIC_RCV_IOREQ      (forward to GIC, 		       only if not already pending, or also not active for PIRs)
+   \  GIC_SND_IORPL      (inject virt IRQ and reply to memory, only if not already pending, or also not active for PIRs)
+   |  MMU_RCV_MRPL       (reply to MMU,       	       	       only if not already pending, or also not active for PIRs)
+   |  HV_IRQ_RCV_INJECT  (HV_RCV_MRPL, 			       only if not already pending, or also not active for PIRs)
+   |  HV_IRQ_SND_DEACT   (HV_SND_MREQ, sends r to GIC	       only if already pending, or active for PIRs, or if SGI)
+   |  MMU_SND_MREQ   	 (forward r to memory                  only if already pending, or active for PIRs, or if SGI)
+   |  GIC_RCV_IOREQ	 (forward to GIC 		       only if already pending, or active for PIRs, or if SGI)
+    \ GIC_SND_IORPL	 (deactivate IRQ and reply to memory   only if already pending, or active for PIRs, or if SGI)
+    | MMU_RCV_MRPL	 (reply to MMU	                       only if already pending, or active for PIRs, or if SGI)
+    | HV_IRQ_RCV_DEACT	 (HV_RCV_MRPL			       only if already pending, or active for PIRs, or if SGI)
+    `-HV_IRQ_RETURN    	 (HV_INTERNAL)
+
+
+ideal_STARTUP_sim_step_lem
+core is launched by boot loader / power management
+
+case: cold boot, primary core
+   __ 
+  /  HV_INIT_PRIM_COLD
+ /   HV_INIT_PRIM_INIT
+|    HV_INIT_GUEST
+|    HV_INIT_CORE
+!====HV_INIT_LAUNCH 
+
+case: warm boot, secondary primary
+   __
+  /  HV_INIT_SEC_COLD 
+ /   HV_INIT_PRIM_COLD **	(only if not executed yet)
+|    HV_INIT_PRIM_INIT **	(only if not executed yet)
+|    CORE_RCV_EVENT
+|    HV_INIT_WARM
+|    HV_INIT_SEC_PRIM
+|    HV_INIT_GUEST
+|    HV_INIT_CORE
+!====HV_INIT_LAUNCH 
+
+case: warm boot, secondary secondary
+   __
+  /  HV_INIT_SEC_COLD 
+ /   HV_INIT_PRIM_COLD **	(only if not executed yet)
+|    HV_INIT_PRIM_INIT **	(only if not executed yet)
+|    CORE_RCV_EVENT
+|    HV_INIT_WARM
+|    HV_INIT_SEC_SEC
+|    HV_INIT_GUEST
+|    HV_INIT_CORE
+!====HV_INIT_LAUNCH 
+
+case: soft boot
+
+!====HV_INIT_LAUNCH 
+
+
+refined_HV_RCV_MRPL_sim_step_lem
+hypervisor receives reply from GIC, lots of cases
+
+HV_GICD_UNLOCK_READ **HANDLER-TODO**  
+HV_GICD_UNLOCK_WRITE  
+HV_IRQ_RCV_ACK	      
+HV_IRQ_RCV_EOI	      
+HV_IRQ_RCV_CHECK      
+HV_IRQ_RCV_INJECT     
+HV_IRQ_RCV_DEACT      
+HV_SIGC_RCV_SGI	      
+HV_RIGC_RCV_ACK 
+HV_RIGC_RCV_EOI 
+HV_RIGC_RCV_CHECK 
+HV_RIGC_RCV_INJECT
+HV_RIGC_RCV_DEACT 
+
+all coupled with empty ideal step
+
+
+refined_HV_SND_MREQ_sim_step_lem
+hypervisor sends GIC requests, lots of cases
+
+HV_GICD_REQ_READ **HANDLER-TODO**
+HV_GICD_REQ_WRITE 
+HV_ASYNC_SND_ACK
+HV_IRQ_SND_EOI
+HV_IRQ_SND_CHECK 
+HV_IRQ_SND_INJECT 
+HV_IRQ_SND_DEACT 
+HV_SIGC_SND_SGI 
+HV_RIGC_SND_EOI 
+HV_RIGC_SND_CHECK 
+HV_RIGC_SND_INJECT
+HV_RIGC_SND_DEACT 
+
+all coupled with empty ideal step
+
+
+refined_HV_INTERNAL_sim_step_lem
+internal hypervisor steps, e.g. fault injection, save/restore, init/boot
+
+HV_INIT_ABORT       == empty ideal step
+HV_LOOP 	    == empty ideal step
+HV_INIT_PRIM_COLD   == empty ideal step
+HV_INIT_PRIM_INIT   == empty ideal step
+HV_INIT_GUEST	    == empty ideal step
+HV_INIT_CORE	    == empty ideal step
+HV_INIT_LAUNCH	    == IR_RULE_STARTUP
+HV_INIT_SEC_COLD    == empty ideal step
+HV_INIT_WARM        == empty ideal step
+HV_INIT_SEC_PRIM    == empty ideal step
+HV_INIT_SEC_SEC     == empty ideal step
+HV_INIT_SOFT        == empty ideal step
+HV_SMC_ISSUE        == IR_CORE_SND_ELIST
+HV_SMC_DENY	    == IR_CORE_FAIL_PSCI
+HV_GICD_FAIL	    == IR_CORE_RCV_MRPL   (receive fault from CIF)
+HV_GICD_EMU_READ    == IR_GIC_SND_IORPL   (generate corresponding read reply)
+HV_GICD_EMU_WRITE   == IR_GIC_SND_IORPL	  (generate corresponding write reply)
+		      _		      
+		     / IR_CIF_RCV_SRPL    (memory forwards GICD read reply **HANDLER-DONE**)
+HV_GICD_REPLY_READ  !==IR_CORE_RCV_MRPL   (core receives GICD read reply **HANDLER-TODO**)
+		      _                                                    
+		     / IR_CIF_RCV_SRPL    (memory forwards GICD write reply)
+HV_GICD_REPLY_WRITE !==IR_CORE_RCV_MRPL   (core receives GICD write reply)  
+
+HV_ASYNC_IRQ	    == empty ideal step
+HV_IRQ_RETURN	    == empty ideal step
+HV_SIGC_ENTRY	    == empty ideal step
+HV_SIGC_DROP 	    == IR_CORE_FAIL_SIGC
+HV_SIGC_RETURN	    == empty ideal step
+HV_RIGC_RETURN	    == empty ideal step
+HV_MMU_FAULT 	    == IR_CORE_RCV_MRPL   (receive fault from CIF)
+
+
+
+refined_GIC_SND_IORPL_sim_step_lem **GUEST/SWITCH-DONE/TODO:GICD**
+GIC replies to IO replies, need to maintain GIC distributor
+virtualization among other things
+
+case: GICD, not GICD_SGIR while in SIGC handler **HANDLER-TODO**, 
+GICV **GUEST/SWITCH:DONE** 
+
+!==IR_GIC_SND_IORPL   (generate corresponding reply, with same effect on GIC)
+
+case: GICD_SGIR while in SIGC handler
+
+!==C_RCU   	      (set sIGC message box)
+
+case: GICC_AIAR, not IGC interrupt, can be injected
+
+!==IR_GIC_DIST	      (GIC forwards virtualized interrupt to core interface)
+
+case: GICC_AIAR, IGC interrupt, can be injected
+
+!==C_IGC	      (IGC interrupt received in GIC core interface)
+
+case: GICC, not GICC_AIAR or can't be injected, or GICH
+
+empty ideal step
+
+
+
+*MEDIUM*, i.e., a few cases, usually one step on both models, use of
+invariants / axiomatic semantics
+
+ideal_CORE_RCV_IRQ_sim_step_lem **GUEST/SWITCH-TODO**
+core receives virtual interrupt, takes exception
+
+!==CORE_RCV_IRQ
+
+
+ideal_CORE_RCV_MRPL_sim_step_lem **GUEST/SWITCH-TODO**
+core receives memory replies, incl. faults and GICD replies
+
+case: read/write/walk, not GICD
+
+!==CORE_RCV_MRPL
+
+case: fault (forwarded fault from memory / peripherals / GIC)
+ 
+!==CORE_RCV_MRPL    (core receives MMU fault, exception semantics)
+
+case: read/write, GICD **HANDLER-TODO**
+
+!==HV_GICD_REPLY_READ / HV_GICD_REPLY_WRITE	(HV_INTERNAL, hypervisor injects reply into core)
+`--HV
+
+
+ideal_CORE_SND_ELIST_sim_step_lem
+success case of power management handler
+  _
+ / CORE_INTERNAL    (core executes SMC, exception semantics)
+!==HV_SMC_ISSUE     (HV_INTERNAL, hypervisor sends PSCI event list)
+
+
+ideal_PER_SND_IRQ_sim_step_lem **GUEST/SWITCH-TODO**
+peripheral sends interrupt to GIC
+
+!==PER_SND_IRQ
+
+
+ideal_GIC_RCV_IOREQ_sim_step_lem **GUEST/SWITCH-TODO**
+GIC receives IO request, either to core interface or distributor
+
+case: GICD **HANDLER-TODO**
+
+empty refined step
+
+case: ~GICD **GUEST/SWITCH-TODO**
+
+!==GIC_RCV_IOREQ    (same request received)
+
+
+ideal_CIF_SND_SREQ_sim_step_lem **GUEST/SWITCH-DONE**
+memory receives core request, special case for GIC distributor requests
+
+case: GICD **HANDLER-TODO**
+
+empty refined step
+
+case: ~GICD **GUEST/SWITCH-DONE**
+
+!==MMU_SND_MREQ    (translated request sent)
+
+
+ideal_CIF_RCV_SRPL_sim_step_lem **GUEST/SWITCH-TODO**
+memory reply to core, special cases for GIC distributor and IO requests
+
+case: GICD **HANDLER-TODO**
+
+empty refined step
+
+case: ~GICD **GUEST/SWITCH-TODO**
+
+!==MMU_RCV_MRPL	   (MMU receives final translated reply, either from memory or forwarded IO reply)
+
+
+ideal_CIF_FAULT_sim_step 
+fault for core request generated, special case for GIC distributor requests
+
+case: not GICD (second stage translation fault)
+  _
+ / CORE_RCV_MRPL    (core receives MMU fault, exception semantics)
+!==HV_MMU_FAULT     (HV_INTERNAL, hypervisor injects fault into core)
+
+case: GICD fault, request not OK or not supported
+  _
+ / CORE_RCV_MRPL    (core receives MMU fault, exception semantics)
+!==HV_GICD_FAIL     (HV_INTERNAL, hypervisor injects fault into core)
+
+
+refined_CORE_RCV_IRQ_sim_step_lem **GUEST/SWITCH:TODO**
+core receives virtual or physical interrupt, takes exception
+
+case virtual:
+
+!==IR_CORE_RCV_IRQ
+
+case physical:
+
+empty ideal step
+
+
+refined_MMU_SND_MREQ_sim_step_lem 
+MMU sends final / page table request to memory, special case for GIC
+distributor requests, need memory isolation
+
+case: GICD **HANDLER-TODO**, translation lookup **GUEST/SWITCH-DONE**
+
+empty ideal step
+
+case: ~GICD, final request **GUEST/SWITCH-TODO**
+
+!==IR_CIF_SND_SREQ
+
+
+refined_MMU_RCV_MRPL_sim_step_lem 
+reply from memory to MMU, special case for GIC distributor requests,
+need memory isolation
+
+case: GICD **HANDLER-TODO**, translation lookup **GUEST/SWITCH-DONE**
+
+empty ideal step 
+
+case: ~GICD, final request **GUEST/SWITCH-TODO**
+
+!==IR_CIF_RCV_SRPL
+
+
+refined_PER_SND_IRQ_sim_step_lem **GUEST/SWITCH-DONE**
+peripheral sends interrupt to GIC
+
+!==IR_PER_SND_IRQ
+
+
+refined_SMMU_SND_DMAREQ_sim_step_lem **GUEST/SWITCH-DONE**
+SMMU sends DMA / page table request to memory, need memory isolation
+
+case: translation lookup
+
+empty ideal step
+
+case: final request
+
+!==IR_PIF_SND_DMAREQ
+
+
+refined_SMMU_RCV_DMARPL_sim_step_lem **GUEST/SWITCH-DONE**
+SMMU receives reply from memory, different cases for request and address,
+IGC memory coupling
+
+!==IR_PIF_RCV_DMARPL
+
+
+refined_GIC_RCV_IOREQ_sim_step_lem **GUEST/SWITCH-DONE**
+GIC receives IO request, need to distinguish up to 4 GIC regions
+
+case: GICC, GICD, GICH
+
+empty ideal step
+
+case: GICV
+
+!==IR_GIC_RCV_IOREQ
+
+
+
+*EASY*, i.e., mostly 1-to-1 coupling, few other relation clauses or
+components affected
+
+ideal_CORE_RCV_EVENT_sim_step_lem **GUEST/SWITCH-TODO**
+core receives power event
+
+case: stop
+
+!==CORE_RCV_EVENT
+
+case: start
+
+!==CORE_RCV_EVENT
+ `-HV_INIT_SOFT
+
+
+ideal_CORE_INTERNAL_sim_step_lem **GUEST/SWITCH-TODO**
+internal core step
+
+!==CORE_INTERNAL
+
+
+ideal_CORE_FAIL_PSCI_sim_step_lem
+fail case of power management handler
+  _
+ / CORE_INTERNAL    (core executes SMC, exception semantics)
+!==HV_SMC_DENY 	    (HV_INTERNAL, hypervisor ignores request)
+
+
+ideal_CORE_FAIL_SIGC_sim_step_lem
+fail case of send SGI interrupt handler
+  
+  /CORE_INTERNAL    (core executes HVC, exception semantics)
+ / HV_SIGC_ENTRY    (save context)
+!==HV_SIGC_DROP     (HV_INTERNAL, hypervisor ignores IGC request)
+
+
+ideal_PER_RCV_DMARPL_sim_step_lem **GUEST/SWITCH-TODO**
+peripheral receives DMA reply
+
+!==PER_RCV_DMARPL
+
+
+ideal_PER_RCV_IOREQ_sim_step_lem **GUEST/SWITCH-TODO**
+peripheral receives IO request
+
+!==PER_RCV_IOREQ
+
+
+ideal_PER_RCV_PEV_sim_step_lem **GUEST/SWITCH-TODO**
+peripheral receives external event
+
+!==PER_RCV_PEV
+
+
+ideal_PER_SND_IORPL_sim_step_lem **GUEST/SWITCH-TODO**
+peripheral sends IO reply
+
+!==PER_SND_IORPL
+
+
+ideal_PER_SND_PEV_sim_step_lem **GUEST/SWITCH-TODO**
+peripheral sends external reply
+
+!==PER_SND_PEV
+
+
+ideal_PER_INTERNAL_sim_step_lem **GUEST/SWITCH-DONE**
+internal peripheral step
+
+!==PER_INTERNAL
+
+
+ideal_MEM_INTERNAL_sim_step_lem **GUEST/SWITCH-TODO**
+internal memory step
+
+!==MEM_INTERNAL
+
+
+ideal_PIF_SND_DMAREQ_sim_step_lem **GUEST/SWITCH-TODO**
+memory receives DMA request
+
+!==SMMU_SND_DMAREQ
+
+
+ideal_PIF_RCV_DMARPL_sim_step_lem **GUEST/SWITCH-TODO**
+memory sends DMA reply
+
+!==SMMU_RCV_DMARPL
+
+
+ideal_PIF_FAULT_sim_step_lem **GUEST/SWITCH-TODO**
+DMA request generates fault for peripheral
+
+!==PER_RCV_DMARPL    (peripheral receives same fault)
+
+
+refined_CORE_RCV_MRPL_sim_step_lem **GUEST/SWITCH-TODO**
+core receives memory reply for guest
+
+!==IR_CORE_RCV_MRPL     (same reply received, same effect)
+
+
+refined_CORE_RCV_EVENT_sim_step_lem **GUEST/SWITCH-TODO**
+core receives power management event
+
+case: stop, start in soft boot
+
+!==IR_CORE_RCV_EVENT
+
+case: start in warm boot
+
+empty ideal step
+
+
+refined_CORE_SND_MREQ_sim_step_lem **GUEST/SWITCH-DONE**
+core sends memory request for guest
+
+!==IR_CORE_SEND_MREQ    (same request pending in CIF)
+
+
+refined_CORE_INTERNAL_sim_step_lem **GUEST/SWITCH-TODO**
+internal core step
+
+!==IR_CORE_INTERNAL     (same step executed)
+
+
+refined_HV_SND_ELIST_sim_step_lem
+hypervisor sends power management events
+
+!==IR_CORE_SND_ELIST
+
+
+refined_MMU_INTERNAL_sim_step_lem **GUEST/SWITCH-DONE**
+internal MMU step
+
+empty ideal step
+
+
+refined_PER_RCV_DMARPL_sim_step_lem **GUEST/SWITCH-DONE**
+peripheral receives DMA reply from SMMU
+
+!==IR_PER_RCV_DMARPL   (same reply received)
+
+
+refined_PER_RCV_IOREQ_sim_step_lem **GUEST/SWITCH-TODO**
+peripheral receives IO request from memory
+
+!==IR_PER_RCV_IOREQ
+
+
+refined_PER_RCV_PEV_sim_step_lem **GUEST/SWITCH-TODO**
+peripheral receives external event
+
+!==IR_PER_RCV_PEV
+
+
+refined_PER_SND_DMAREQ_sim_step_lem **GUEST/SWITCH-TODO**
+peripheral sends DMA request to SMMU
+
+!==IR_PER_SND_DMAREQ
+
+
+refined_PER_SND_IORPL_sim_step_lem **GUEST/SWITCH-TODO**
+peripheral sends IO reply to memory
+
+!==IR_PER_SND_IORPL
+
+
+refined_PER_SND_PEV_sim_step_lem **GUEST/SWITCH-TODO**
+peripheral sends external event
+
+!==IR_PER_SND_PEV
+
+
+refined_PER_INTERNAL_sim_step_lem **GUEST/SWITCH-DONE**
+internal peripheral step
+
+!==IR_PER_INTERNAL
+
+
+refined_SMMU_INTERNAL_sim_step_lem **GUEST/SWITCH-DONE**
+internal SMMU step
+
+empty ideal step
+
+
+refined_MEM_INTERNAL_sim_step_lem **GUEST/SWITCH-TODO**
+internal memory step
+
+!==IR_MEM_INTERNAL
