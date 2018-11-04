@@ -1,4 +1,12 @@
-(* This theory contains the proof for the ideal invariant *)
+(* This theory proves the invariant of the ideal model.
+   To that end, the following areas are dealt with:
+    1. First we prove the invariant for the core component separately.
+    2. In the main part, we show the invariant for an entire guest.
+       This concerns several hundreds of combinations 
+       of transitions and invariant clauses.
+       We employ machinery from idealInvProofLib to address this complexity.
+    3. Finally we prove lemmas on the composed model and put
+       the puzzle pieces together. *)
 
 
 (********** Loading *************)
@@ -23,7 +31,6 @@ open annotationsLib; infix //; infix ///; infix -:;
 open idealInvProofLib;
 
 val _ = new_theory "idealInvProof";
-
 
 
 (************* ideal core invariant ***************)
@@ -51,11 +58,12 @@ val idcore_step_CASES = store_thm ("id_core_step_CASES", ``
 
 
 (* proof of ideal core invariant *)
+(* by a first case split on the clauses and a subsequent split on the steps *)
 val inv_good_idcore_lem = store_thm("inv_good_idcore_lem",
     ``!C a C'. inv_good_idcore C /\ idcore_step(C,a,C') ==> inv_good_idcore C'``,
     FULL_SIMP_TAC std_ss [inv_good_idcore_def] THEN
     REPEAT STRIP_TAC THENL
-    [(* clause 1: card *)
+    [(* clause 1: cardinality *)
      FULL_SIMP_TAC std_ss [idcore_step_CASES] THEN
      IMP_RES_TAC idcore_step_axiom THEN
      FULL_SIMP_TAC (srw_ss()++ARITH_ss) [pred_setTheory.CARD_DIFF_EQN],
@@ -130,8 +138,18 @@ val preproven_idg_invariants =
 );
 
 
-(* PROOF FOR IDEAL INVARIANTS
-   about 31 trans x 20 inv = 620 comb | 300 non-trivial subgoals | 4 minutes (230 sec) *)
+(* Proof of ideal guest-internal invariants:
+   about 31 transitions x 20 invariant clauses = 620 combinations,
+   whereof roughly 300 non-trivial subgoals 
+   --
+   The proof employs machinery from idealInvProofLib.
+   This library includes a "strategy", a data structure that maps
+   invariant clauses to a set of definitions, theorems, corollaries and tactics,
+   which then will be employed here in case the respective clause
+   is identified in the subgoal.
+   The intention is to be able to come up with a rather universal 
+   brief proof description that is agnostic on whether case splits
+   are done on invariant clauses or on transitions first. *)
 
 
 val InvG_thm = store_thm("InvG_thm",
@@ -156,7 +174,16 @@ val InvG_thm = store_thm("InvG_thm",
     REPEAT STRIP_TAC >>
     IMP_RES_TAC good_match_lem >>
     FULL_SIMP_TAC (srw_ss()) [FORALL_AND_THM, combinTheory.APPLY_UPDATE_THM, combinTheory.APPLY_UPDATE_ID] >>
-    (* for each subgoal *)
+    (* for each subgoal, do the following steps;
+      here, tactical WITH_CTX extracts constants from the goal and provides them
+      via parameter c to some tailored tactics/tacticals:
+        - II_CTX_TAC applies the tactics which the strategy datastructure
+                     associates with the identified constants 
+        - II_CTX_MET extracts theorems from the strategy datastructure
+                     that are relevant for the identified constants
+                     and provides them to a METIS solver tactic
+        - II_CTX_COR is used to enhance the assertion list
+                     based on the InvG corollaries *)
     WITH_CTX
     (fn c =>
       (* unfold involved clauses and split cases *)
@@ -174,7 +201,7 @@ val InvG_thm = store_thm("InvG_thm",
       II_CTX_TAC c >>
       II_CTX_MET c (fn l => TRY (INFS_LIMITED_METIS_TAC 1 ([not_all_req_rep_lem, match_ReqOf_lem, inv_good_per_wrap_def, optionTheory.IS_SOME_EXISTS]@l)))
     )
-    (* Peripheral cases, treat separately, TODO: fix tactics *)
+    (* Peripheral cases, treat separately *)
     >| [Cases_on `r = ReqOf q` >> (
             FULL_SIMP_TAC (srw_ss()) [combinTheory.APPLY_UPDATE_THM] >>
             INFS_LIMITED_METIS_TAC 1 [not_all_req_rep_lem, match_ReqOf_lem, inv_good_per_wrap_def, optionTheory.IS_SOME_EXISTS, optionTheory.SOME_11]
