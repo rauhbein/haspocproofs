@@ -5168,6 +5168,8 @@ TODO?: lemma that memory abstraction changes only for writes
    
    an MMIO reply q must be receivable if:
    - there is a matching request pending as sent
+
+   TODO: add necessary precondition about Agicper
 *)
 val mem_rcv_rpl_enabled_axiom = new_axiom("mem_rcv_rpl_enabled_axiom", ``
 !m q r id. (r,id) IN mem_req_sent m /\ match(r,q)
