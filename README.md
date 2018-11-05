@@ -12,10 +12,11 @@ https://haspoc.sics.se/
 ## DISCLAIMER
 
 The models and proofs presented here are a snapshot of our formal development
-and are provided for eyes of the reviewers only, for now. They clearly need a
-thorough cleanup and additional commenting before they will be presentable to
-the public. We are currently updating the documentation so that it will be ready
-for the submission of a camera-ready version. 
+and are provided for eyes of the reviewers only, for the time being. The code
+clearly needs a thorough cleanup and additional commenting before they will be
+presentable tothe public. We are currently updating the documentation and the
+source files so that they will be in better shape for the submission of a
+camera-ready version.
 
 Moreover we acknowledge that our formalisation and the proofs may be seen as
 rather inelegant and brute-force at times. We blame this in part on lack of
