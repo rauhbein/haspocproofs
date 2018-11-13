@@ -1123,6 +1123,8 @@ val idcore_step_axiom = new_annotated_axiom ("idcore_step_axiom",
     - no memory requests were issued
     - the history variable (launch) is unchanged
     - the internal state is FLUSHED (due to the call to the hypervisor)
+
+    TODO: increase PC
  *)
  ``!C C' s. idcore_step_snd_igc(C,s,C') ==> 
 	     ?v.

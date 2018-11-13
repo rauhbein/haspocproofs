@@ -373,6 +373,7 @@ val id_rule_core_fail_psci_def = Define `id_rule_core_fail_psci (G : guest, g : 
            /\ (G' = G with <| C := (c =+ C') G.C|>)
 `;
 
+(* TODO: increase PC *)
 val id_rule_core_fail_sigc_def = Define `id_rule_core_fail_sigc (G : guest, g : num, c : num, G' : guest) =
 ?C' s.
               idcore_step(G.C c, SEND (SIGC s), C')
