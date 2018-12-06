@@ -92,14 +92,45 @@ val inv_good_idcore_lem = store_thm("inv_good_idcore_lem",
      RW_TAC arith_ss [] THEN
      FULL_SIMP_TAC (srw_ss()) [] THEN 
      METIS_TAC [idcore_step_axiom // "rcv_psci"],
-     (* clause 7: empty req_sent on flush *)
+     (* clause 7: curr_va updated on send, otherwise req_sent' empty,
+	   not needed *)
+     `idcore_req_sent C' <> EMPTY` by (
+         CCONTR_TAC >>
+         FULL_SIMP_TAC (srw_ss()) [pred_setTheory.NOT_IN_EMPTY]
+     ) >>
+     `FINITE (idcore_req_sent C')` by (
+         FULL_SIMP_TAC std_ss [idcore_step_CASES] THEN
+         IMP_RES_TAC idcore_step_axiom THEN
+         FULL_SIMP_TAC (srw_ss()++ARITH_ss) [pred_setTheory.CARD_DIFF_EQN]
+     ) >>
+     `CARD (idcore_req_sent C') = 1` by (
+         `CARD (idcore_req_sent C') <= 1` by (
+             FULL_SIMP_TAC std_ss [idcore_step_CASES] THEN
+             IMP_RES_TAC idcore_step_axiom THEN
+             FULL_SIMP_TAC (srw_ss()++ARITH_ss) [pred_setTheory.CARD_DIFF_EQN]
+         ) >>
+         `CARD (idcore_req_sent C') <> 0` by (
+     	     METIS_TAC [pred_setTheory.CARD_EQ_0]
+     	 ) >>
+     	 DECIDE_TAC
+     ) >>
+     FULL_SIMP_TAC std_ss [idcore_step_CASES] THEN
+     IMP_RES_TAC idcore_step_axiom THEN
+     UNDISCH_ALL_TAC THEN
+     REPEAT CASE_TAC THEN
+     RW_TAC arith_ss [] THEN
+     IMP_RES_TAC pred_setTheory.CARD_DIFF_EQN >>
+     FULL_SIMP_TAC (srw_ss()++ARITH_ss) [pred_setTheory.NOT_IN_EMPTY,
+     					 IN_INTER_SING_lem] >>
+     METIS_TAC [idcore_step_axiom // "snd_req"],
+     (* clause 8: empty req_sent on flush *)
      FULL_SIMP_TAC std_ss [idcore_step_CASES] THEN
      IMP_RES_TAC idcore_step_axiom THEN
      METIS_TAC [next_int_not_flushed_lem, delete_only_element_lem],
-     (* postponce clauses 8 -11 *)
+     (* postpone clauses 9 -12 *)
      ALL_TAC, ALL_TAC, ALL_TAC, ALL_TAC]
     THEN
-    ((* clauses 8 - 11: internal state waiting for GIC reply *)
+    ((* clauses 9 - 12: internal state waiting for GIC reply *)
      FULL_SIMP_TAC std_ss [idcore_step_CASES] THEN
      IMP_RES_TAC idcore_step_axiom THEN
      TRY (Cases_on `r`) THEN

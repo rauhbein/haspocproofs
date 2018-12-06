@@ -574,6 +574,16 @@ val HVabs_mmu_send_lem = store_thm ("HVabs_mmu_send_lem", ``
   RW_TAC std_ss [HVabs_def,combinTheory.APPLY_UPDATE_THM]
 );
 
+val HVabs_gic_send_lem = store_thm ("HVabs_gic_send_lem", ``
+!RM c m' GIC'.
+(mem_abs RM.m = mem_abs m')
+==> 
+(HVabs (RM with <|m := m'; GIC := GIC'|>,c) = HVabs (RM,c))
+``,
+  RW_TAC std_ss [HVabs_def,combinTheory.APPLY_UPDATE_THM]
+);
+
+
 val refined_comp_concat_lem = store_thm("refined_comp_concat_lem", ``
 !RM n RM' n' RM''. refined_comp (RM,n,RM') /\ refined_comp (RM',n',RM'')
 ==>
@@ -4783,28 +4793,29 @@ val id_final_smmu_rpl_lem = store_thm("id_final_smmu_rpl_lem", ``
 
 (* golden fault information *)
 
-val mmu_golden_fault_FAR_lem = store_thm("mmu_golden_fault_FAR_lem", ``
-!RM q MMU' c.
-   c < RPAR.nc
-/\ InvR RM
-/\ Mode (RM.C c) < 2
-/\ mmu_step_snd_rpl(RM.MMU c,q,MMU') 
-/\ Frpl q
-==>
-((11 >< 0) (extract_FAR (fiOf q)) = (11 >< 0) (Rpl_Adr q) :bool[12])
-``,
-  REPEAT STRIP_TAC >>
-  `(refcore_abs (RM.C c)).H.init_core` by ( 
-      FULL_SIMP_TAC std_ss [InvR_EXPAND, Mode_mode_lem] >>
-      METIS_TAC [ref_inv_hist_def] 
-  ) >>
-  IMP_RES_TAC mmu_golden_conf_lem >>
-  IMP_RES_TAC Frpl_ALT_DEF >>
-  IMP_RES_TAC mmu_golden_fault_FAR_axiom >>
-  `good_rpl q` by ( RW_TAC std_ss [good_rpl_def] ) >>
-  ASM_REWRITE_TAC [fiOf_def] >>
-  RW_TAC std_ss [Rpl_Adr_ReqOf_lem, ReqOf_def]
-);
+(* not valid any more *)
+(* val mmu_golden_fault_FAR_lem = store_thm("mmu_golden_fault_FAR_lem", `` *)
+(* !RM q MMU' c. *)
+(*    c < RPAR.nc *)
+(* /\ InvR RM *)
+(* /\ Mode (RM.C c) < 2 *)
+(* /\ mmu_step_snd_rpl(RM.MMU c,q,MMU')  *)
+(* /\ Frpl q *)
+(* ==> *)
+(* ((11 >< 0) (extract_FAR (fiOf q)) = (11 >< 0) (Rpl_Adr q) :bool[12]) *)
+(* ``, *)
+(*   REPEAT STRIP_TAC >> *)
+(*   `(refcore_abs (RM.C c)).H.init_core` by (  *)
+(*       FULL_SIMP_TAC std_ss [InvR_EXPAND, Mode_mode_lem] >> *)
+(*       METIS_TAC [ref_inv_hist_def]  *)
+(*   ) >> *)
+(*   IMP_RES_TAC mmu_golden_conf_lem >> *)
+(*   IMP_RES_TAC Frpl_ALT_DEF >> *)
+(*   IMP_RES_TAC mmu_golden_fault_FAR_axiom >> *)
+(*   `good_rpl q` by ( RW_TAC std_ss [good_rpl_def] ) >> *)
+(*   ASM_REWRITE_TAC [fiOf_def] >> *)
+(*   RW_TAC std_ss [Rpl_Adr_ReqOf_lem, ReqOf_def] *)
+(* ); *)
 
 (* refined memory reply lemma *)
 
@@ -10470,7 +10481,7 @@ val ideal_GIC_SND_IORPL_sim_step_lem = store_thm("ideal_GIC_SND_IORPL_sim_step_l
 			   hv_guard_mmu_fault_lem, hv_guard_mmu_fault_eq_lem,
 			   hv_mmu_fault_entry_eq_lem, 
 			   hv_guard_gicd_fail_lem,
-			   HVabs_mmu_send_lem, 
+			   (* HVabs_gic_send_lem, *)
       			   Trreq_eq_req_lem, Trrpl_eq_rpl_lem,
 			   Mode_arith_lem, Mode_ineq_lem] ) )
       ,
@@ -12166,8 +12177,9 @@ bisim_ctx_core (idcore_abs ((IM.G (PCG c)).C (PCC c)),
 ((refcore_abs C').H = (refcore_abs (RM.C c)).H) /\
 hv_mmu_fault_entry_point (refcore_abs C') /\
 ((39 >< 4) ((refcore_abs C').SPR (INR HPFAR_EL2)) = Rpl_PAdr q) /\
-((11 >< 0) ((refcore_abs C').SPR (INR FAR_EL2)) = 
-    (11 >< 0) (extract_FAR (fiOf q)) :bool[12])
+(~PTreq (ReqOf q) ==>
+ ((11 >< 0) ((refcore_abs C').SPR (INR FAR_EL2)) =
+    (11 >< 0) (curr_va (refcore_int (RM.C c))) :bool[12]))
 ``,
   NTAC 7 STRIP_TAC >>
   IMP_RES_TAC soft_Mode_lem >>
@@ -12301,14 +12313,14 @@ hv_mmu_fault_entry_point (refcore_abs C') /\
       ,
       (* page index in FAR_EL2 *)
       PAT_X_ASSUM ``!r:SPRguest + SPRhyp. x`` (
-          fn thm => ASSUME_TAC ( 
-	      SPEC ``INR FAR_EL2:SPRguest + SPRhyp`` thm 
-		    )
+          fn thm => ASSUME_TAC (
+      	      SPEC ``INR FAR_EL2:SPRguest + SPRhyp`` thm
+      		    )
       ) >>
       REV_FULL_SIMP_TAC std_ss [exception_hyp_regs_axiom] >>
-      REWRITE_TAC [fiOf_def] >> 
+      REWRITE_TAC [ReqOf_def] >>
       REWRITE_TAC [wordsTheory.WORD_w2w_EXTRACT,
-		   wordsTheory.WORD_EXTRACT_COMP_THM] >>
+      		   wordsTheory.WORD_EXTRACT_COMP_THM] >>
       EVAL_TAC
      ]      
 );
@@ -12479,13 +12491,14 @@ val refined_CORE_RCV_MRPL_sim_step_lem = store_thm("refined_CORE_RCV_MRPL_sim_st
     EXISTS_TAC ``IM:ideal_model`` >>
     REWRITE_TAC [ideal_model_comp_def] >>
     IMP_RES_TAC compute_fault_axiom >>
-    IMP_RES_TAC mmu_golden_fault_FAR_lem >>
+    IMP_RES_TAC InvR_core_curr_va_lem >>
     IMP_RES_TAC bisim_ctx_core_st2_fault_lem >>
     IMP_RES_TAC soft_Mode_lem >>
     IMP_RES_TAC match_PAdr_eq_lem >>
     IMP_RES_TAC good_Frpl_lem >>
     `Adr (ReqOf r) = ((39><4)((refcore_abs C').SPR(INR HPFAR_EL2)):bool[36])
-		  @@ ((11><0)((refcore_abs C').SPR(INR FAR_EL2)):bool[12])` by (
+		  @@ ((11><0)(Adr (ReqOf r)):bool[12])` by (
+		  (* @@ ((11><0)((refcore_abs C').SPR(INR FAR_EL2)):bool[12])` by ( *)
         RW_TAC std_ss [] >>
 	`Adr (ReqOf r) = Rpl_Adr r` by ( METIS_TAC [Rpl_Adr_ReqOf_lem] ) >>
 	RW_TAC std_ss [Rpl_Adr_concat_lem]
@@ -15722,7 +15735,7 @@ val refined_GIC_SND_IORPL_sim_step_lem = store_thm("refined_GIC_SND_IORPL_sim_st
 			   hv_guard_mmu_fault_lem, hv_guard_mmu_fault_eq_lem,
 			   hv_mmu_fault_entry_eq_lem,
 			   hv_guard_gicd_fail_lem,
-			   HVabs_mmu_send_lem, 
+			   (* HVabs_gic_send_lem,  *)
       			   Trreq_eq_req_lem, Trrpl_eq_rpl_lem,
 			   Mode_arith_lem, Mode_ineq_lem] ) )
       ,

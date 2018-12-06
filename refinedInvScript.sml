@@ -1439,6 +1439,23 @@ val InvR_core_launched_lem = store_thm("InvR_core_launched_lem", ``
   IMP_RES_TAC ref_inv_hist_def
 );
 
+val InvR_core_curr_va_lem = store_thm("InvR_core_curr_va_lem", ``
+!RM c r.
+   InvR RM
+/\ c < RPAR.nc
+/\ r IN refcore_req_sent (RM.C c)
+==>
+   ~PTreq r
+==>
+((11 >< 0) (curr_va (refcore_int (RM.C c))) =
+ (11 >< 0) (Adr r) :bool[12])
+``,
+  RW_TAC std_ss [InvR_EXPAND] >>
+  RES_TAC >>
+  METIS_TAC [inv_good_refcore_def]
+);
+
+
 (* MMU lemmas *)
 
 val mmu_fault_state_lem = store_thm("mmu_fault_state_lem", ``

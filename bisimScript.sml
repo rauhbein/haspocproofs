@@ -998,7 +998,11 @@ val bisim_mmureq_guest_core_def = Define `bisim_mmureq_guest_core (RC, MMU, cif,
         /\ (PAdr r NOTIN PAR.A_G (PCG c) \/ 
 	    PAdr r IN receiverMem (PCG c)/\ Wreq r)
         /\ (Adr r = ((39><4)((refcore_abs RC).SPR(INR HPFAR_EL2)):bool[36])
-		@@ ((11><0)((refcore_abs RC).SPR(INR FAR_EL2)):bool[12]))))
+		@@ ((11><0)(Adr r):bool[12]))
+        /\ (~PTreq r ==> 
+	    ((11 >< 0)(Adr r) = ((11><0)((refcore_abs RC).SPR(INR FAR_EL2)):bool[12])))
+	)
+   )
 /\ (!r. r IN mmu_req_rcvd MMU ==> r IN cif.req_rcvd)
 /\ (hv_gicd_entry_state hv ==> 
        (?r. r IN cif.req_rcvd /\ (PAdr r = Agicd)) )
@@ -1007,7 +1011,11 @@ val bisim_mmureq_guest_core_def = Define `bisim_mmureq_guest_core (RC, MMU, cif,
         /\ (PAdr r NOTIN PAR.A_G (PCG c) \/ 
 	    PAdr r IN receiverMem (PCG c)/\ Wreq r)
         /\ (Adr r = ((39><4)((refcore_abs RC).SPR(INR HPFAR_EL2)):bool[36])
-		 @@ ((11><0)((refcore_abs RC).SPR(INR FAR_EL2)):bool[12]))))
+		 @@ ((11><0)(Adr r):bool[12]))
+        /\ (~PTreq r ==> 
+	    ((11 >< 0)(Adr r) = ((11><0)((refcore_abs RC).SPR(INR FAR_EL2)):bool[12])))
+       )
+   )
 /\ (!r. ( r IN cif.req_sent <=> 
 	  (Trreq (PCG c) r IN mmu_req_sent MMU 
 	   /\ IS_SOME(Trans (PCG c) (PAdr r)) ) ) )

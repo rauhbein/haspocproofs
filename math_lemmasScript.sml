@@ -278,6 +278,23 @@ val DISJOINT_MEMBER_NOT_EQUAL = store_thm("DISJOINT_MEMBER_NOT_EQUAL", ``
   METIS_TAC []
 ); 
 
+val not_empty_CARD_lem = store_thm("not_empty_CARD_lem", ``
+!s. FINITE s ==> s <> EMPTY ==> CARD s > 0
+``,
+  REPEAT STRIP_TAC >>
+  `CARD s <> 0` suffices_by ( DECIDE_TAC ) >>
+  METIS_TAC [pred_setTheory.CARD_EQ_0]
+);
+
+val IN_INTER_SING_lem = store_thm("IN_INTER_SING_lem", ``
+!s x. x IN s ==> (s INTER {x} = {x})
+``,
+  REPEAT STRIP_TAC >>
+  RW_TAC std_ss [pred_setTheory.EXTENSION] >>
+  RW_TAC std_ss [pred_setTheory.IN_INTER, 
+		 pred_setTheory.IN_SING] >>
+  METIS_TAC []
+);
 
 (************** words ********************)
 

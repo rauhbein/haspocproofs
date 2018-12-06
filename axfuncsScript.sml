@@ -493,8 +493,22 @@ val cis_abs_flushed_axiom = new_axiom("cis_abs_flushed_axiom", ``
 (* identify non-supported gicd accesses, 
    we assume that the message info contains the necessary informations *)
 val _ = new_constant("gicd_acc_not_supported", ``:msginfo -> bool``);
-(* the contents of the fault address register after receiving the given fault *)
+
+(* the contents of the fault address register after receiving the given fault 
+   NOTE: this is the virtual address so it should be derived from the 
+         core internal state instead of the message / fault info
+   TODO: remove, replaced by curr_va
+*)
 val _ = new_constant("extract_FAR", ``:fault_info -> bool[64]``);
+
+(* virtual address for the current memory request,
+   can have arbitrary value if there is no current request,
+   this has to be extended if more than one request can be pending,
+   note that curr_va is completely uninterpreted here, 
+   as the virtual addresses and first stage MMU are controlled by the guest
+*)
+val _ = new_constant("curr_va", ``:core_internal_state -> bool[64]``);
+
 (* the contents of the exception syndrome register for the given request and
 fault information as well as the internal core state *) 
 val _ = new_constant("extract_ESR", 
@@ -1209,6 +1223,9 @@ val idcore_step_axiom = new_annotated_axiom ("idcore_step_axiom",
     post-conditions:
     - the core is still active
     - the memory request r is recorded in idcore_reqsent
+    - the lower 12 bits of current virtual address match the request's
+      intermediate physical address lower bits, 
+      holds only for non page table walks
     - the history variable (launch) is unchanged
     - the internal state is updated by next_int_snd
     - the exception level is unchanged
@@ -1241,6 +1258,9 @@ val idcore_step_axiom = new_annotated_axiom ("idcore_step_axiom",
  ``!C C' r. idcore_step_snd_req(C,r,C') ==>
 	        (idcore_req_sent C = EMPTY)
              /\ (idcore_req_sent C' = {r})
+             /\ (~PTreq r ==> 
+                 ((11 >< 0) (curr_va (idcore_int C')) =
+	      	  (11 >< 0) (Adr r) :bool[12]))
              /\ (idcore_abs C).active
              /\ (idcore_abs C').active
              /\ ((idcore_abs C').H = (idcore_abs C).H)
@@ -1306,7 +1326,7 @@ val idcore_step_axiom = new_annotated_axiom ("idcore_step_axiom",
     - the GPRs are unchanged
     - SPR ELR_EL1 contains the old PC
     - SPR ESR_EL1 contains extracted fault information
-    - SPR FAR_EL1 contains the faulting address information
+    - SPR FAR_EL1 contains the faulting virtual address information
     - SPR SPSR_EL1 contains the old value of PSTATE
     - other SPRs of EL1 are unchanged
     - the internal state is FLUSHED
@@ -1330,7 +1350,7 @@ val idcore_step_axiom = new_annotated_axiom ("idcore_step_axiom",
 		      w2w (extract_ESR_EL1 (idcore_int C, r, fi, 
 					    (idcore_abs C).PSTATE))
 		  else if R=FAR_EL1 then 
-		      (idcore_abs C').SPR R = w2w (extract_FAR fi)
+		      (idcore_abs C').SPR R = w2w (curr_va (idcore_int C))
 		  else if R=SPSR_EL1 then 
 		      (idcore_abs C').SPR R = w2w ((idcore_abs C).PSTATE)
 		  else (idcore_abs C').SPR R  = (idcore_abs C).SPR R )
@@ -1410,18 +1430,20 @@ val idcore_step_axiom = new_annotated_axiom ("idcore_step_axiom",
 (* invariant on the ideal core in terms of abstraction,
    mainly sanity checks and implicit assumptions of the model:
 
-   - at most one pending memory request
+   - at most one pending memory request 
    - the exception level is at most EL1
    - inactive cores have no pending memory request and a FLUSHED internal state
-   - if the launch bit is set, the core is inactive / powered down
-   - if the abstract interal state is FLUSHED, no memory request are pending
+   - if the launch bit is set, the core is inactive / powered down 
+   - the lower 12 address bits of any pending memory request, that is not a
+     translation request, are equal to those of the current virtual address
+   - if the abstract interal state is FLUSHED, no memory request are pending 
    - the internal state is GICD_RS R iff an memory mapped I/O read access to the
      GICD is pending, that can be emulated by the hypervisor and the resulting
-     value will be written into R
-   - the internal state is GICD_RNS if an unsupported GICD read is pending
-   - the internal state is GICD_WS R iff an memory mapped I/O write access to
-     the GICD is pending, that can be emulated by the hypervisor and the
-     value to be written is taken from source register R
+     value will be written into R 
+   - the internal state is GICD_RNS if an unsupported GICD read is pending 
+   - the internal state is GICD_WS R iff an memory mapped I/O write access to 
+     the GICD is pending, that can be emulated by the hypervisor and the value 
+     to be written is taken from source register R 
    - the internal state is GICD_WNS if an unsupported GICD write is pending
 
    TODO: GICD_RNS and GICD_WNS can probably be omitted / merged with OTHER
@@ -1433,6 +1455,8 @@ val inv_good_idcore_def = Define `inv_good_idcore (C:idcore) =
  /\ ((~(idcore_abs C).active) ==> (idcore_req_sent C = EMPTY))
  /\ ((~(idcore_abs C).active) ==> (id_abs_int C = FLUSHED))
  /\ ((idcore_abs C).H.launch ==> ~(idcore_abs C).active)
+ /\ (!r. r IN idcore_req_sent C /\ ~PTreq r ==>
+ 	 ((11 >< 0) (Adr r) = (11 >< 0) (curr_va (idcore_int C)) :bool[12]))
  /\ ((id_abs_int C = FLUSHED) ==> (idcore_req_sent C = EMPTY))
  /\ ((?R. id_abs_int C = GICD_RS R) <=> 
 	 (?r. Rreq r /\ PAdr r IN RPAR.Amap GICD 
@@ -2695,6 +2719,8 @@ C with <| PC := C.PC + 4w |>
 val inv_good_refcore_def = Define `inv_good_refcore (C:refcore) = 
     CARD(refcore_req_sent C) <= 1 /\ FINITE (refcore_req_sent C)
  /\ ((~(refcore_abs C).active) ==> (refcore_req_sent C = EMPTY))
+ /\ (!r. r IN refcore_req_sent C /\ ~PTreq r ==>
+ 	 ((11 >< 0) (Adr r) = (11 >< 0) (curr_va (refcore_int C)) :bool[12]))
  /\ ((ref_abs_int C = FLUSHED) ==> (refcore_req_sent C = EMPTY))
  /\ ((?R. ref_abs_int C = GICD_RS R) <=> 
 	 (?r. Rreq r /\ PAdr r IN RPAR.Amap GICD /\ r IN refcore_req_sent C
@@ -2724,6 +2750,8 @@ val refcore_send_axiom = new_axiom("refcore_send_axiom", ``
 (* only one request at a time, needs to be adapted for more advanced core *)
 /\ (refcore_req_sent C = EMPTY)
 /\ (refcore_req_sent C' = refcore_req_sent C UNION {r})
+/\ (~PTreq r ==> 
+    ((11 >< 0) (curr_va (refcore_int C')) =  (11 >< 0) (Adr r) :bool[12]))
 /\ ((refcore_abs C).H = (refcore_abs C').H)
 /\ (Mode C' = Mode C)
 /\ (ref_abs_int C' = next_int_snd (refcore_int C) r)
@@ -2767,7 +2795,7 @@ val refcore_rcv_fault_axiom = new_axiom("refcore_rcv_fault_axiom", ``
 				  fi, 
 				  (refcore_abs C).PSTATE) )
 	 else if R=INL FAR_EL1 then 
-	     (refcore_abs C').SPR R = w2w (extract_FAR fi)
+	     (refcore_abs C').SPR R = w2w (curr_va (refcore_int C))
 	 else if R=INL SPSR_EL1 then 
 	     (refcore_abs C').SPR R = w2w ((refcore_abs C).PSTATE)
 	 else (refcore_abs C').SPR R  = (refcore_abs C).SPR R )
@@ -2844,7 +2872,7 @@ val refcore_fault_axiom = new_axiom("refcore_fault_axiom", ``
 /\ (!r. 
 if r=INR ELR_EL2 then (refcore_abs C').SPR r = (refcore_abs C).PC
 else if r=INR ESR_EL2 then (refcore_abs C').SPR r = w2w (extract_ESR (refcore_int C, R, fi))
-else if r=INR FAR_EL2 then (refcore_abs C').SPR r = w2w (extract_FAR fi)
+else if r=INR FAR_EL2 then (refcore_abs C').SPR r = w2w (curr_va (refcore_int C))
 else if r=INR HPFAR_EL2 then (refcore_abs C').SPR r = 
 			         w2w ( (PAdr R @@ (0b0000w:bool[4])) :bool[40])
 else if r=INR SPSR_EL2 then (refcore_abs C').SPR r = w2w ((refcore_abs C).PSTATE)
@@ -2998,8 +3026,7 @@ val refcore_rcv_rpl_enabled_axiom = new_axiom("refcore_rcv_rpl_enabled_axiom", `
 ?C'. refcore_step_rcv_rpl(C,q,C')
 ``);
 
-(* onl
-y receive power events in while there are no requests outstanding *)
+(* only receive power events in while there are no requests outstanding *)
 val refcore_psci_enabled_axiom = new_axiom("refcore_psci_enabled_axiom", ``
 !C e. ((refcore_req_sent C = EMPTY) \/ ~(refcore_abs C).active)
 ==> 
@@ -3009,7 +3036,7 @@ val refcore_psci_enabled_axiom = new_axiom("refcore_psci_enabled_axiom", ``
 (* sending and internal steps may be enabled or not, 
 we just need to schedule them if the ideal mode performs them as well *) 
 
-(* TODO: core step bisimulation axioms (with the ideal model),
+(* core step bisimulation axioms (with the ideal model),
 sending and internal steps to be existentially quantified, need both directions
 *)
 
@@ -3497,14 +3524,16 @@ val mmu_golden_fault_axiom = new_axiom("mmu_golden_fault_axiom", ``
 ((tr (PAdr r) = NONE) \/ PAdr r IN RO /\ Wreq r)
 ``);			 
 
-(* no translation faults, fault info contains requested address *)
+(* no translation faults, fault info contains requested address
+   NOTE: extract_FAR is no longer used at the MMU, hence we removed the line
+   ((11 >< 0) (extract_FAR fi) = (11 >< 0) (Adr r) :bool[12]) /\
+ *)
 val mmu_golden_fault_FAR_axiom = new_axiom("mmu_golden_fault_FAR_axiom", ``
 !MMU q MMU' GI cfg PT RO tr r fi.
    mmu_golden_conf (MMU, GI, cfg, PT, RO, tr) 
 /\ mmu_step_snd_rpl(MMU,q,MMU') 
 /\ (q = Fault r fi)
 ==>
-((11 >< 0) (extract_FAR fi) = (11 >< 0) (Adr r) :bool[12]) /\
 (fi = golden_fi (GI, cfg, PT, RO) r)
 ``);
 
@@ -3592,13 +3621,17 @@ val mmu_final_rpl_axiom = new_axiom("mmu_final_rpl_axiom", ``
       /\ Rpl_val_eq q q' 
 ``);			 
 
-(* restrict fault info for GICD faults *)
+(* restrict fault info for GICD faults 
+   TODO: as gicd_req_ok, is defined in terms of failgicd, 
+         this can possibly be simplified or generalized,
+         it is not used at the moment, in any case
+*)
 val mmu_gicd_fault_rpl_axiom = new_axiom("mmu_gicd_fault_rpl_axiom", ``
 !MMU r q MMU' fi. mmu_step_snd_rpl(MMU,q,MMU') 
 	       /\ (q = Fault r fi)
 	       /\ (PAdr r IN RPAR.Amap GICD)
 ==>
-   (failgicd((11><0) (extract_FAR fi), SzOf r = 1, Wreq r) <=> ~gicd_req_ok r)
+   (failgicd((11><0) (Adr r), SzOf r = 1, Wreq r) <=> ~gicd_req_ok r)
 ``);
 
 val mmu_unique_lookup_match_lem = store_thm("mmu_unique_lookup_match_lem", ``
