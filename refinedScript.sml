@@ -234,9 +234,15 @@ val ref_rule_mem_internal_def = Define `ref_rule_mem_internal (M : refined_model
 ?m'. mem_step(M.m, TAU, NONE, m') /\ (M' = M with <|m := m'|>)
 `;
 
+val ref_rule_ext_input_def = Define `
+ref_rule_ext_input (M : refined_model, l : pevent list, M' : refined_model) = 
+(M' = M with <|E_in := M.E_in ++ l|>)
+`;
+
+
 (**************** Refined Model Transition System ***************)
 
-val _ = Datatype `Refined_Rule = CORE_RCV_IRQ num | CORE_RCV_MRPL num | CORE_RCV_EVENT num | CORE_SND_MREQ num | CORE_INTERNAL num | HV_RCV_MRPL num | HV_SND_ELIST num | HV_SND_MREQ num | HV_INTERNAL num | MMU_SND_MREQ num | MMU_RCV_MRPL num | MMU_INTERNAL num | PER_RCV_DMARPL num | PER_RCV_IOREQ num | PER_RCV_PEV num | PER_SND_DMAREQ num | PER_SND_IORPL num | PER_SND_PEV num | PER_SND_IRQ num | PER_INTERNAL num | SMMU_RCV_DMARPL num | SMMU_SND_DMAREQ num | SMMU_INTERNAL num | GIC_RCV_IOREQ | GIC_SND_IORPL | MEM_INTERNAL`;
+val _ = Datatype `Refined_Rule = CORE_RCV_IRQ num | CORE_RCV_MRPL num | CORE_RCV_EVENT num | CORE_SND_MREQ num | CORE_INTERNAL num | HV_RCV_MRPL num | HV_SND_ELIST num | HV_SND_MREQ num | HV_INTERNAL num | MMU_SND_MREQ num | MMU_RCV_MRPL num | MMU_INTERNAL num | PER_RCV_DMARPL num | PER_RCV_IOREQ num | PER_RCV_PEV num | PER_SND_DMAREQ num | PER_SND_IORPL num | PER_SND_PEV num | PER_SND_IRQ num | PER_INTERNAL num | SMMU_RCV_DMARPL num | SMMU_SND_DMAREQ num | SMMU_INTERNAL num | GIC_RCV_IOREQ | GIC_SND_IORPL | MEM_INTERNAL | EXT_INPUT (pevent list)`;
 
 val refined_trans_def = Define `refined_trans (M : refined_model, R : Refined_Rule, M' : refined_model) =
 	case R of
@@ -270,6 +276,7 @@ val refined_trans_def = Define `refined_trans (M : refined_model, R : Refined_Ru
           | GIC_RCV_IOREQ => ref_rule_gic_rcv_ioreq(M,M')
           | GIC_SND_IORPL => ref_rule_gic_snd_iorpl(M,M')
           | MEM_INTERNAL => ref_rule_mem_internal(M,M')
+	  | EXT_INPUT l => ref_rule_ext_input (M,l,M')
 `;
 
 

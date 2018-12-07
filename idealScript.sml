@@ -525,12 +525,15 @@ val id_rule_external_rcv_rcu_def = Define `id_rule_external_rcv_rcu (G, s, c, co
   /\ idcore_step(G.C c, SEND (SIGC s), C')
   /\ (G' = G with <| sIGC := sigc'; C := (c =+ C') G.C  |>)`;
 
+val id_rule_external_input_def = Define `id_rule_external_input (G:guest, g, l, G') =
+(G' = G with <| E_in := G.E_in ++ PEL(l,g) |>)`;
+
 
 (**************** Ideal Model Transition System ***************)
 
 val _ = Datatype `Ideal_Internal_Rule = IR_CORE_RCV_IRQ num | IR_CORE_RCV_MRPL num | IR_CORE_RCV_EVENT num | IR_CORE_SND_MREQ num | IR_CORE_INTERNAL num | IR_CORE_SND_ELIST num | IR_CORE_FAIL_PSCI num | IR_CORE_FAIL_SIGC num | IR_PER_RCV_DMARPL num | IR_PER_RCV_IOREQ request num | IR_PER_RCV_PEV num | IR_PER_SND_DMAREQ num | IR_PER_SND_IORPL num | IR_PER_SND_PEV num | IR_PER_SND_IRQ num num | IR_PER_INTERNAL num | IR_GIC_RCV_IOREQ request | IR_GIC_SND_IORPL | IR_GIC_DIST irqID num | IR_MEM_INTERNAL | IR_CIF_SND_SREQ request num | IR_CIF_RCV_SRPL num | IR_PIF_SND_DMAREQ request num | IR_PIF_RCV_DMARPL num | IR_CIF_FAULT reply num | IR_PIF_FAULT reply num | IR_RULE_STARTUP num `;
 
-val _ = Datatype `Ideal_External_Message = IGC_ num num | RCU_ num (num option) `;
+val _ = Datatype `Ideal_External_Message = IGC_ num num | RCU_ num (num option) | INPUT (pevent list)`;
 
 val _ = Datatype `Ideal_Rule = INTERNAL Ideal_Internal_Rule | EXTERNAL_SND Ideal_External_Message | EXTERNAL_RCV Ideal_External_Message`;
 
@@ -612,6 +615,7 @@ val ideal_guest_trans_def = Define `ideal_guest_trans (G: guest, g:num, R : Idea
                                              /\ (FST (PAR.cpol s5) = g)
                                              /\ c6 < (PAR.nc_g g)
                                              /\ id_rule_external_rcv_rcu (G, s5, c6, co2, G'))
+	  | EXTERNAL_RCV (INPUT l) => id_rule_external_input (G, g, l, G')
 
           | _ => F`;
 
@@ -1360,16 +1364,21 @@ val comp_rule_rcu_def = Define `comp_rule_rcu (IM:ideal_model, IM':ideal_model) 
   /\ ideal_guest_trans (IM.G g2, g2, EXTERNAL_RCV (RCU_ s co), G2')
   /\ (IM' = IM with <| G := (g1 =+ G1') ((g2 =+ G2') IM.G) |>) `;
 
+val comp_rule_input_def = Define `comp_rule_input (IM:ideal_model, IM':ideal_model) =
+?l. !g. g < PAR.ng ==> 
+    ?G'. ideal_guest_trans (IM.G g, g, EXTERNAL_RCV (INPUT l), G')
+      /\ (IM'.G g = G') `;
 
 
-val _ = Datatype `Composed_Rule = C_INTERNAL | C_IGC | C_RCU`;
+val _ = Datatype `Composed_Rule = C_INTERNAL | C_IGC | C_RCU | C_EXTI`;
 
 (* TODO: pass sIGC information to constrain GIC_DIST action *)
 val ideal_model_trans_def = Define `ideal_model_trans (IM:ideal_model, R:Composed_Rule, IM':ideal_model) =
     case R of
         C_INTERNAL => comp_rule_internal(IM, IM')
       | C_IGC      => comp_rule_igc     (IM, IM')
-      | C_RCU      => comp_rule_rcu     (IM, IM')`;
+      | C_RCU      => comp_rule_rcu     (IM, IM')
+      | C_EXTI     => comp_rule_input   (IM, IM')`;
 
 
 

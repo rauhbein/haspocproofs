@@ -398,7 +398,14 @@ THENL [(* 1. base case *)
                      (* 2.1.3. RCU signal *)
                           FULL_SIMP_TAC (srw_ss()) [comp_rule_rcu_def,
                                                     combinTheory.APPLY_UPDATE_THM]
-                     THEN METIS_TAC [InvG_thm]],
+                     THEN METIS_TAC [InvG_thm]
+	             ,
+		     (* 2.1.4. EXT input *)
+                     FULL_SIMP_TAC (srw_ss()) [comp_rule_input_def,
+                                               combinTheory.APPLY_UPDATE_THM] >>
+                     METIS_TAC [InvG_thm]
+		    ]
+		 ,
               (* 2.2. sync invariant *)
                    FULL_SIMP_TAC (srw_ss()) [syncInv_def]
               THEN RW_TAC (srw_ss()) []
@@ -442,7 +449,20 @@ THENL [(* 1. base case *)
                      (* 2.2.3. RCU signal *)
                           FULL_SIMP_TAC (srw_ss()) [comp_rule_rcu_def, combinTheory.APPLY_UPDATE_THM, combinTheory.APPLY_UPDATE_ID, ideal_guest_trans_def, id_rule_external_snd_rcu_def, id_rule_external_rcv_rcu_def]
                      THEN RW_TAC (srw_ss()) []
-                     THEN METIS_TAC []]]]);
+                     THEN METIS_TAC []
+		     ,
+		     (* 2.2.4. EXT input *)
+		     FULL_SIMP_TAC (srw_ss()) [comp_rule_input_def, 
+					       combinTheory.APPLY_UPDATE_THM, 
+					       combinTheory.APPLY_UPDATE_ID, 
+					       ideal_guest_trans_def, 
+					       id_rule_external_input_def] >>
+		     RW_TAC (srw_ss()) [] >>
+                     METIS_TAC []		    
+		    ]
+	     ]
+      ]
+);
 
 
 

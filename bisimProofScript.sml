@@ -11489,10 +11489,11 @@ val ideal_STARTUP_sim_step_lem = store_thm("ideal_STARTUP_sim_step_lem", ``
 /\ (IM'' = IM with G := (g =+ G') IM.G)
 /\ sync_shared_mem_upd_of_guest (IM'', g, IM')
 ==>
-∃n RM'. refined_comp (RM,n,RM') /\ SIM (RM',IM') /\ SimInvR RM'
+?n RM'. refined_comp (RM,n,RM') /\ SIM (RM',IM') /\ SimInvR RM'
 ``,
   cheat
 );
+
 
 (* **GUEST/SWITCH** *)
 val ideal_C_INTERNAL_sim_step_thm = store_thm("ideal_C_INTERNAL_sim_step_thm", ``
@@ -11500,7 +11501,7 @@ val ideal_C_INTERNAL_sim_step_thm = store_thm("ideal_C_INTERNAL_sim_step_thm", `
    SIM (RM, IM) /\ SimInvR RM /\ InvI IM /\ InvR RM 
 /\ ideal_model_trans(IM,C_INTERNAL,IM')
 ==>
-∃n RM'. refined_comp (RM,n,RM') /\ SIM (RM',IM') /\ SimInvR RM'
+?n RM'. refined_comp (RM,n,RM') /\ SIM (RM',IM') /\ SimInvR RM'
 ``,
   RW_TAC (srw_ss()) [ideal_model_trans_def]
   THEN IMP_RES_TAC comp_rule_internal_def
@@ -11535,17 +11536,66 @@ val ideal_C_INTERNAL_sim_step_thm = store_thm("ideal_C_INTERNAL_sim_step_thm", `
 );
 
 
+(* receiving external inputs *)
+val ideal_C_EXTI_sim_step_lem = store_thm("ideal_C_EXTI_sim_step_lem", ``
+!IM RM IM'.
+   SIM (RM, IM) /\ SimInvR RM /\ InvI IM /\ InvR RM 
+/\ ideal_model_trans(IM,C_EXTI,IM')
+==>
+?n RM'. refined_comp (RM,n,RM') /\ SIM (RM',IM') /\ SimInvR RM'
+``,
+  RW_TAC (srw_ss()) [ideal_model_trans_def, comp_rule_input_def,
+		     ideal_guest_trans_def, id_rule_external_input_def] >>
+  (* COUPLING *)
+  EXISTS_TAC ``SUC 0`` >>
+  Q.EXISTS_TAC `RM with E_in := RM.E_in ++ l` >>
+  REPEAT STRIP_TAC 
+  >| [(* EXIST of refined step*)
+      SIMP_TAC std_ss [refined_comp_def] >>
+      Q.EXISTS_TAC `EXT_INPUT l` >>
+      ASM_SIMP_TAC (srw_ss()) [refined_trans_def, ref_rule_ext_input_def]
+      ,
+      (* leave bisim part for later *)
+      ALL_TAC
+      ,
+      (* SimInvR *)
+      FULL_SIMP_TAC (srw_ss()) [SimInvR_def]
+     ] >>
+  (* BISIM *)
+  FULL_SIMP_TAC std_ss [SIM_EXPAND] >>
+  RW_TAC (srw_ss()) (start_and_metis_lst@start_and_impres_lst) >>
+  FULL_SIMP_TAC (srw_ss()) [fall_constructors_thm_of ``:BISIM_CLAUSE``, bisim_rel_def] >>
+  (* all cases except BISIM_EXT  *)
+  EXCEPT_FOR ``bisim_ext (RM',IM')``
+       ( (* instantiate theorems by matching predicate in goal (and imp_res some others)  *)
+         SPEC_BISIM_FROM_GOAL_TAC (solved_by_impres_only_lst) ASSUME_TAC >>
+         MAP_EVERY IMP_RES_TAC start_and_impres_lst >>
+         FULL_SIMP_TAC ((srw_ss())++normalForms.cond_lift_SS) [combinTheory.APPLY_UPDATE_THM, 
+							       HVabs_def] >>
+         (* METIS for everything left *)
+         TRY (INFS_LIMITED_METIS_TAC 1 (HVabs_def::start_and_metis_lst) ) >>
+	 FULL_SIMP_TAC (srw_ss()) [bisim_periph_def, bisim_send_igc_def, 
+				   bisim_send_igc_core_def]
+       ) >>
+  (* BISIM_PERIPH case *)
+  FULL_SIMP_TAC std_ss [bisim_ext_def] >>
+  RW_TAC std_ss [PEL_def, listTheory.FILTER_APPEND_DISTRIB]
+);
+
+
 val ideal_refined_sim_step_thm = store_thm("ideal_refined_sim_step_thm", ``
 !IM RM R IM'.
    SIM (RM, IM) /\ SimInvR RM /\ InvI IM /\ InvR RM 
 /\ ideal_model_trans(IM,R,IM')
 ==>
-∃n RM'. refined_comp (RM,n,RM') /\ SIM (RM',IM') /\ SimInvR RM'
+?n RM'. refined_comp (RM,n,RM') /\ SIM (RM',IM') /\ SimInvR RM'
 ``,
   Cases_on `R`
   THENL [REWRITE_TAC [ideal_C_INTERNAL_sim_step_thm],
 	 REWRITE_TAC [ideal_C_IGC_sim_step_lem],
-	 REWRITE_TAC [ideal_C_RCU_sim_step_lem]]
+	 REWRITE_TAC [ideal_C_RCU_sim_step_lem],
+	 REWRITE_TAC [ideal_C_EXTI_sim_step_lem]
+	]
 );
 
 
@@ -15766,6 +15816,42 @@ val refined_MEM_INTERNAL_sim_step_lem = store_thm("refined_MEM_INTERNAL_sim_step
       INFS_LIMITED_METIS_TAC 1 [])
 );
 
+val refined_EXT_INPUT_sim_step_lem = store_thm("refined_EXT_INPUT_sim_step_lem", ``
+!IM RM RM' l.
+   SIM (RM, IM) /\ InvI IM /\ InvR RM /\ refined_trans(RM,EXT_INPUT l,RM')
+==>
+?n IM'. ideal_model_comp (IM,n,IM') /\ SIM (RM',IM')
+``,
+(* start with reducing goal to COUPLING, EXIST, and BISIM of one common step *) 
+ REPEAT STRIP_TAC >>
+ Q.EXISTS_TAC `SUC 0` >>
+ sg `?G'. !g. g < PAR.ng ==> 
+	      ideal_guest_trans (IM.G g, g, EXTERNAL_RCV (INPUT l), G' g)` >- (
+     RW_TAC (srw_ss()) [ideal_guest_trans_def, id_rule_external_input_def] >>
+     Q.EXISTS_TAC `\g. IM.G g with E_in := (IM.G g).E_in ++ PEL (l,g)` >>
+     RW_TAC std_ss []
+ ) >>
+ Q.EXISTS_TAC `IM with G := G'` >>
+ RW_TAC (srw_ss()) [ideal_model_comp_def] >- (
+     Q.EXISTS_TAC `C_EXTI` >>
+     RW_TAC std_ss [ideal_model_trans_def, comp_rule_input_def] >>
+     METIS_TAC []
+ ) >>
+ UNFOLD_CURRENT_REFINED_TRANS_IN_PREMISES_TAC true >>
+ RW_TAC (srw_ss()) [] >>
+ (**** BISIM ****)
+ FULL_SIMP_TAC (srw_ss()) [SIM_EXPAND, ideal_guest_trans_def,
+			   id_rule_external_input_def] >>
+ REPEAT STRIP_TAC >>
+ FIND_BISIM_PREDICATES_IN_GOAL_TAC bisim_definitions RW_FS_IMPRESS >>
+ (* all cases *)
+ ( REPEAT IF_CASES_TAC >>
+   FULL_SIMP_TAC (srw_ss()) (HVabs_def::bisim_core_definitions) >>
+   TRY ( METIS_TAC [PPG_PPP_inj, PEL_def, 
+		    listTheory.FILTER_APPEND_DISTRIB] ) 
+ )  
+);
+
 
 val refined_ideal_sim_step_thm = store_thm("refined_ideal_sim_step_thm", ``
 !IM RM R RM'.
@@ -15799,7 +15885,9 @@ val refined_ideal_sim_step_thm = store_thm("refined_ideal_sim_step_thm", ``
 	 REWRITE_TAC [refined_SMMU_INTERNAL_sim_step_lem],
 	 REWRITE_TAC [refined_GIC_RCV_IOREQ_sim_step_lem],
 	 REWRITE_TAC [refined_GIC_SND_IORPL_sim_step_lem],
-	 REWRITE_TAC [refined_MEM_INTERNAL_sim_step_lem]]
+	 REWRITE_TAC [refined_MEM_INTERNAL_sim_step_lem],
+	 REWRITE_TAC [refined_EXT_INPUT_sim_step_lem]
+	]
 );
 
 
