@@ -110,7 +110,6 @@ val gm_conf_init_ax = new_axiom("gm_conf_init_ax", ``
    - enable only non-secure interrupts
    - use AIAR register
    - EOIModeNS = 1
-   - priority mask allows all interrupts to be signalled
 
    since we do not model these details of the interrupt controller, they have to
    added for a suitable instantiation of the model
@@ -266,7 +265,7 @@ new_constant("dmsk", ``:(GICDreg -> bool[32]) #
 (* idmsk GICD c
 
    ideal distributor mask, according enabling and targeting information in the
-   distriutor registers for core c
+   distributor registers for core c, represented as a set of masked interrupts 
 
    we use a different function for determining the masked interrupts in the
    ideal GIC distributor because interrupt distributing is modeled in a
@@ -1601,9 +1600,9 @@ val idgic_step_axiom = new_annotated_axiom ("idgic_step_axiom",
     - q is not masked at the distributor, i.e., forwarding it to c is enabled
 
     post-conditions:
-    - add that the pending memory-mapped I/O requests are unchanged
+    - the pending memory-mapped I/O requests are unchanged
     - the physical interrupt state changes:
-        if q is a peripheral, it becomes FORWARDED 
+        if q is a peripheral interrupt, it becomes FORWARDED 
         if q is a SGI, it becomes NOT_ASSERTED (SGI semantics in GICv2)
         for all other interrupts the state is unchanged
     - the interrupt core interface of core c changes:
@@ -1611,7 +1610,7 @@ val idgic_step_axiom = new_annotated_axiom ("idgic_step_axiom",
         if q was PENDING -> q stays PENDING, additional interrupt is ignored
         if q was ACTIVE -> state of q becomes PENDING AND ACTIVE
         if q was PENDACT -> no change, additional interrupt is ignored
-    - the core interfaces of all other cores are unchanged
+    - the core interrupt states of all other cores are unchanged
     - the constant and mutable GICD registers are unchanged, i.e., only the
       volatile part of GICD may change (according to the change in PI)
     - the core interface state (GICC) is unchanged 
@@ -1857,7 +1856,9 @@ val idgic_step_axiom = new_annotated_axiom ("idgic_step_axiom",
    /\ ((idgic_abs G').Q = (idgic_abs G).Q)``,
  "gicd_fault" -:
  (* an access to the GICD does not result in a fault if gicd_req_ok holds for
-    the corresponding request *)
+    the corresponding request
+    TODO: forbid reads of SGIR, write-only register
+  *)
  ``!G q r G' c g. idgic_step_snd_rpl(G, q, CoreSender c, g, G') 
                /\ Rpl_PAdr q IN RPAR.Amap GICD
 	       /\ (r, CoreSender c) IN idgic_req_rcvd G
@@ -1870,7 +1871,8 @@ val idgic_step_axiom = new_annotated_axiom ("idgic_step_axiom",
  ``!G r id g. (r,id) IN idgic_req_rcvd G  ==>
    ?G' q. idgic_step_snd_rpl(G,q,id,g,G') /\ match(r,q)``,
  "good_rpl" -:
- (* the GIC only sends good replies matching a pending request *) 
+ (* the GIC only sends good replies matching a pending request
+    TODO: this seems redundant as it is guaranteed by match *)
  ``!G G' q id g. idgic_step_snd_rpl(G,q,id,g,G') ==>
      (ReqOf q, id) IN idgic_req_rcvd G /\ match(ReqOf q,q)``,
  "snd_fault" -:
