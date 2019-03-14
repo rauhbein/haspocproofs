@@ -396,6 +396,9 @@ new_constant("GICDupd", ``:GICDreg # bool[32] # bool[32] -> bool[32]``);
    update behaviour of register R in the GICD as emulated by the hypervisor for
    that particular guest. Then attempts to configure interrupts not belonging to
    g should have no effect. 
+
+   TODO: this should update the whole GICD register state to account for side
+   effects, e.g., requesting SGIs
 *)
 new_constant("idGICDupd", 
 	     ``:num -> GICDreg # bool[32] # bool[32] -> bool[32]``);

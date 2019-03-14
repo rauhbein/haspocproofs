@@ -590,7 +590,9 @@ val ideal_guest_trans_def = Define `ideal_guest_trans (G: guest, g:num, R : Idea
           | INTERNAL (IR_GIC_SND_IORPL) => id_rule_gic_snd_iorpl(G,g,G')
 (* TODO: only possible if no IGC interrupt pending for receiving core 
    because of priority issues,
-   need to pass sIGC information of other guest from top level *)
+   need to pass sIGC information of other guest from top level 
+   or make action visible on top level, i.e. EXTERNAL_RCV
+*)
           | INTERNAL (IR_GIC_DIST q' c') =>    c' < (PAR.nc_g g)
                                             /\ (idcore_req_sent(G.C c') = EMPTY)
                                             /\ (id_abs_int(G.C c') = FLUSHED)
