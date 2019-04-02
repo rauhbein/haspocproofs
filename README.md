@@ -11,12 +11,9 @@ https://haspoc.sics.se/
 
 ## DISCLAIMER
 
-The models and proofs presented here are a snapshot of our formal development
-and are provided for eyes of the reviewers only, for the time being. The code
-clearly needs a thorough cleanup and additional commenting before they will be
-presentable tothe public. We are currently updating the documentation and the
-source files so that they will be in better shape for the submission of a
-camera-ready version.
+The models and proofs presented here are a snapshot of our formal development. Note that so far only the steps of guests have been proven to preserve a bisimulation between the implementation model and an ideal specification, i.e., the transition system of the hypervisor has been modeled but not verified. 
+
+Note that the documentation is slightly outdated and currently under revision. We will provide a complete and up-to-date version as soon as possible.
 
 Moreover we acknowledge that our formalisation and the proofs may be seen as
 rather inelegant and brute-force at times. We blame this in part on lack of
@@ -38,9 +35,10 @@ compile HOL4 from github.
 
 ## FURTHER COMMENTS
 
-The proof itself should complete in about 20-30 minutes depending on the
-hardware used. Most lemmas are proven in a few seconds while some bigger lemmas
-may take 2-3 minutes. Clearly, we haven't optimized the proofs for speed.
+The proof itself completes in about 30 minutes on an unvirtualized machine with
+8 cores and 32GiB of RAM. Most lemmas are proven in a few seconds while some
+bigger lemmas may take significantly longer. Clearly, we haven't optimized the
+proofs for speed.
 
 In a few parts of the proof we were assisted by Thomas Tuerk, who provided some
 improved definitions and lemmas. These parts are marked accordingly.
@@ -52,7 +50,7 @@ however this work is not finished. It seems to be easier to redefine them from
 scratch as specification functions, using some dummy instantiations for the
 existence proofs, than to replace the current axioms one by one.
 
-As described in the paper, we only showed the bisimulation between the ideal and
+As noted above, we only showed the bisimulation between the ideal and
 refined model for steps that involve the guest. Lemmas about hypervisor steps
 are mainly proven by "cheat", i.e., assumed to be true. The same holds for the
 proof of the refined model invariant which was only conducted on paper.
@@ -97,7 +95,7 @@ mentioned in comments next to the corresponding definitions.
 
 * tacticsLib.sml          -- generic helper tactics
 
-* toolboxLib.sml		-- SML helper functions
+* toolboxLib.sml	  -- SML helper functions
 
 * proof_sketch            -- sketch of bisimulation proof strategy, 
 	 		     showing which steps are coupled for each proof goal

@@ -10031,8 +10031,8 @@ val ideal_PER_SND_IRQ_sim_step_lem = store_thm("ideal_PER_SND_IRQ_sim_step_lem",
                       SPEC_ASSUM_TAC (``!q:irqID. X``, [``q:irqID``]) >>
                       REV_FULL_SIMP_TAC (srw_ss()) [] >>
 		      FULL_SIMP_TAC std_ss [] >>
-                      LIMITED_METIS_TAC 1 [good_proj_in_range_impls, 
-					   PIstate_distinct]
+                      METIS_TAC [good_proj_in_range_impls, 
+				 PIstate_distinct]
 		  )
 	      )
 	  ) 
@@ -10043,7 +10043,7 @@ val ideal_PER_SND_IRQ_sim_step_lem = store_thm("ideal_PER_SND_IRQ_sim_step_lem",
               IMP_RES_TAC PIR_PQQ_lem >>
               IMP_RES_TAC PIRQ_disjoint_lem2 >>
               RW_TAC (srw_ss()++HASPOC_SS) [] >>
-              LIMITED_METIS_TAC 1 []
+              METIS_TAC []
 	  )
 	 ]
      ]
@@ -10442,6 +10442,7 @@ val ideal_GIC_SND_IORPL_sim_step_lem = store_thm("ideal_GIC_SND_IORPL_sim_step_l
       `Mode (RM.C k) < 2` by ( 
           METIS_TAC [gicv_req_mode_lem]
       ) >>
+      IMP_RES_TAC mmu_active_lem >>
       `bisim_perirq(RM',IM')` by (
           METIS_TAC [gicv_rpl_bisim_perirq_lem]
       ) >>
@@ -10476,7 +10477,7 @@ val ideal_GIC_SND_IORPL_sim_step_lem = store_thm("ideal_GIC_SND_IORPL_sim_step_l
 			  id_pend_rpl_def]@bisim_core_definitions) >>
       	  `!c. (RM with <|m := M'; GIC := gic'|>).C c = RM.C c`
 	  by ( FULL_SIMP_TAC (srw_ss()) [combinTheory.APPLY_UPDATE_THM] ) >> 
-      	  TRY ( TIME_LIMITED_METIS_TAC 1.0 [PCG_PCC_inj, proj_bound_lem,
+      	  TRY ( METIS_TAC [PCG_PCC_inj, proj_bound_lem,
       			   hv_gicd_entry_state_lem, hv_gicd_entry_state_eq_lem, 
 			   hv_guard_mmu_fault_lem, hv_guard_mmu_fault_eq_lem,
 			   hv_mmu_fault_entry_eq_lem, 
@@ -14273,7 +14274,7 @@ val refined_MMU_INTERNAL_sim_step_lem = store_thm("refined_MMU_INTERNAL_sim_step
       FULL_SIMP_TAC (srw_ss()) ([HVabs_def, 
 				 combinTheory.APPLY_UPDATE_THM]@bisim_core_definitions) >>
       TRY ( `(mmu_abs(RM.MMU c)).active` by ( METIS_TAC [] ) ) >>
-      LIMITED_METIS_TAC 1 []
+      METIS_TAC []
   )
 );
 
@@ -14329,7 +14330,7 @@ val refined_PER_RCV_DMARPL_sim_step_lem = store_thm("refined_PER_RCV_DMARPL_sim_
     FULL_SIMP_TAC (srw_ss()) bisim_core_definitions >>
     FULL_SIMP_TAC (srw_ss()) [combinTheory.APPLY_UPDATE_THM, HVabs_def,
                               hv_guard_mmu_fault_def, hv_gicd_entry_state_def, hv_guard_gicd_fail_def] >>
-    INFS_LIMITED_METIS_TAC 1 [PPG_PPP_inj, Trrpl_eq_rpl_lem, good_match_lem]
+    METIS_TAC [PPG_PPP_inj, Trrpl_eq_rpl_lem, good_match_lem]
    ],
    (* 2. FAULT *)
    STEP'N'COUPLE_IDEAL_ALONG_WITH_REFINED_TAC (``INTERNAL (IR_PIF_FAULT r (PPP n))``, NoMem, withoutAnnotations) >>
@@ -14388,7 +14389,7 @@ val refined_PER_RCV_DMARPL_sim_step_lem = store_thm("refined_PER_RCV_DMARPL_sim_
      FULL_SIMP_TAC (srw_ss()) bisim_core_definitions >>
      FULL_SIMP_TAC (srw_ss()) [combinTheory.APPLY_UPDATE_THM, HVabs_def,
                                hv_guard_mmu_fault_def, hv_gicd_entry_state_def, hv_guard_gicd_fail_def] >>
-     INFS_LIMITED_METIS_TAC 1 [PPG_PPP_inj])
+     METIS_TAC [PPG_PPP_inj])
    ]
   ]
 );
@@ -14897,7 +14898,7 @@ val refined_PER_SND_IRQ_sim_step_lem = store_thm("refined_PER_SND_IRQ_sim_step_l
         THEN IMP_RES_TAC (bisim_rel_def |> SIMP_RULE bool_ss [bisim_periph_def])
         THEN IMP_RES_TAC good_proj_in_range_impls
         THEN FULL_SIMP_TAC (srw_ss()) []
-        THEN LIMITED_METIS_TAC 1 [coupling_axiom, in_PIRQ_lem, idgic_step_axiom // "rcv_irq_enabled"],
+        THEN METIS_TAC [coupling_axiom, in_PIRQ_lem, idgic_step_axiom // "rcv_irq_enabled"],
         (**** BISIM ****)
         IMP_RES_TAC good_proj_in_range_impls
           (* step consequences *)
@@ -14939,14 +14940,14 @@ val refined_PER_SND_IRQ_sim_step_lem = store_thm("refined_PER_SND_IRQ_sim_step_l
                         THEN FULL_SIMP_TAC std_ss []
                         THEN SPEC_ASSUM_TAC (``!q:irqID. X``, [``q':irqID``])
                         THEN REV_FULL_SIMP_TAC (srw_ss()) []
-                        THEN LIMITED_METIS_TAC 1 [],
+                        THEN METIS_TAC [],
                        (* PPG n <> g *)
                        GEN_TAC
                         THEN Cases_on `PIR q = q'`
                         THEN IMP_RES_TAC PIR_PQQ_lem
                         THEN IMP_RES_TAC PIRQ_disjoint_lem2
                         THEN RW_TAC (srw_ss()++HASPOC_SS) []
-                        THEN LIMITED_METIS_TAC 1 []]]]);
+                        THEN METIS_TAC []]]]);
 
 
 (* EASY: same step in both models, nothing else affected 
@@ -15285,7 +15286,7 @@ val refined_SMMU_INTERNAL_sim_step_lem = store_thm("refined_SMMU_INTERNAL_sim_st
   FIND_BISIM_PREDICATES_IN_GOAL_TAC bisim_definitions RW_FS_IMPRESS >>
   FULL_SIMP_TAC (srw_ss()) ([hv_gicd_entry_state_def, hv_guard_mmu_fault_def,hv_guard_gicd_fail_def,
                              HVabs_def, combinTheory.APPLY_UPDATE_THM]@bisim_core_definitions) >>
-  LIMITED_METIS_TAC 1 []
+  METIS_TAC []
 );
 
 val gic_req_not_gicv_no_trans_lem = store_thm("gic_req_not_gicv_no_trans_lem", ``
@@ -15780,12 +15781,13 @@ val refined_GIC_SND_IORPL_sim_step_lem = store_thm("refined_GIC_SND_IORPL_sim_st
 			  id_pend_rpl_def]@bisim_core_definitions) >>
       	  `!c. (RM with <|m := m'; GIC := GIC'|>).C c = RM.C c`
 	  by ( FULL_SIMP_TAC (srw_ss()) [combinTheory.APPLY_UPDATE_THM] ) >> 
-      	  TRY ( TIME_LIMITED_METIS_TAC 1.0 [PCG_PCC_inj, proj_bound_lem,
+      	  (* TRY ( TIME_LIMITED_METIS_TAC 1.0 [PCG_PCC_inj, proj_bound_lem, *)
+      	  TRY ( METIS_TAC [PCG_PCC_inj, proj_bound_lem,
       			   hv_gicd_entry_state_lem, hv_gicd_entry_state_eq_lem, 
 			   hv_guard_mmu_fault_lem, hv_guard_mmu_fault_eq_lem,
 			   hv_mmu_fault_entry_eq_lem,
 			   hv_guard_gicd_fail_lem,
-			   (* HVabs_gic_send_lem,  *)
+			   HVabs_gic_send_lem,
       			   Trreq_eq_req_lem, Trrpl_eq_rpl_lem,
 			   Mode_arith_lem, Mode_ineq_lem] ) )
       ,
@@ -15813,7 +15815,7 @@ val refined_MEM_INTERNAL_sim_step_lem = store_thm("refined_MEM_INTERNAL_sim_step
       FIND_BISIM_PREDICATES_IN_GOAL_TAC bisim_definitions RW_FS_IMPRESS >>
       FULL_SIMP_TAC (srw_ss()) bisim_core_definitions >>
       FULL_SIMP_TAC (srw_ss()) [combinTheory.APPLY_UPDATE_THM, HVabs_def] >>
-      INFS_LIMITED_METIS_TAC 1 [])
+      METIS_TAC [])
 );
 
 val refined_EXT_INPUT_sim_step_lem = store_thm("refined_EXT_INPUT_sim_step_lem", ``

@@ -1192,7 +1192,8 @@ val do_sync_shared_mem_upd_of_guest_def = Define `do_sync_shared_mem_upd_of_gues
    (!g2. (~(?s. (s < PAR.ns) /\ (PAR.cpol s = (g1,g2))))
      ==> ((IM'.G g2).m = (IM.G g2).m))
    /\
-   (* non-IGC-memory has not changed *)
+   (* non-IGC-memory has not changed 
+      TODO: this is redundant and could be proved as a lemma *)
    (!g2 a. (~(?s. (s < PAR.ns) /\ (PAR.cpol s = (g1,g2)) /\ (SND(PAR.igca s) = a)))
      ==> (mem_abs ((IM'.G g2).m) a = mem_abs ((IM.G g2).m) a))
    /\
