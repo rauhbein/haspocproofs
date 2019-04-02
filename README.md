@@ -1,7 +1,7 @@
 # haspocproofs
 
-HOL4 Model and Proofs for "Compositional Verification of Security Properties for
-Embedded Execution Platforms"
+HOL4 Model and Proofs for "On the Verification of System Level Information Flow
+Properties for Virtualized Execution Platforms"
 
 Submission to JCEN by Christoph Baumann, Oliver Schwarz, and Mads Dam
 
